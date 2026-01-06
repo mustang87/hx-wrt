@@ -1,6 +1,12 @@
 #!/bin/sh
-
 set -e
+
+wlan_name="HX-WRT"
+wlan_password="9876543210"
+root_password="admin"
+lan_ip_address="192.168.18.1"
+
+exec >/tmp/hx-uci-10-brand.log 2>&1
 
 # hostname / timezone
 uci set system.@system[0].hostname='hx-wr3000k'
@@ -8,9 +14,19 @@ uci set system.@system[0].timezone='CST-8'
 uci set system.@system[0].zonename='Asia/Shanghai'
 uci commit system
 
-# mark version info (optional)
+# LuCI language to Chinese
+uci -q set luci.main.lang='zh_cn'
+uci commit luci || true
+
+# Set root password (only if configured)
+if [ -n "$root_password" ]; then
+  (echo "$root_password"; sleep 1; echo "$root_password") | passwd >/dev/null
+fi
+
+# brand metadata
 mkdir -p /etc/hx-wrt
 [ -f /etc/hx-wrt/version ] || echo "dev" > /etc/hx-wrt/version
 [ -f /etc/hx-wrt/channel ] || echo "dev" > /etc/hx-wrt/channel
 
+echo "[OK] brand/base done"
 exit 0

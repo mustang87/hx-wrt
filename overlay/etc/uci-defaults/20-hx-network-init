@@ -1,9 +1,16 @@
 #!/bin/sh
 set -e
 
-# 默认 LAN IP：避免与常见 192.168.1.1 冲突
-uci set network.lan.ipaddr='192.168.10.1'
-uci set network.lan.netmask='255.255.255.0'
-uci commit network
+lan_ip_address="192.168.18.1"
 
+exec >/tmp/hx-uci-20-lan.log 2>&1
+
+# Configure LAN (IP + netmask 必须设置！)
+if [ -n "$lan_ip_address" ]; then
+  uci set network.lan.ipaddr="$lan_ip_address"
+  uci set network.lan.netmask='255.255.255.0'
+  uci commit network
+fi
+
+echo "[OK] lan ip done"
 exit 0

@@ -1,0 +1,6 @@
+DISTRIB_ID='HX-WRT'
+DISTRIB_RELEASE='dev'
+DISTRIB_REVISION='unknown'
+DISTRIB_TARGET='mediatek/filogic'
+DISTRIB_ARCH='aarch64_cortex-a53'
+DISTRIB_DESCRIPTION='HX-WRT dev build'

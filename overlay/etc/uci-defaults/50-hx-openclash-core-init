@@ -1,0 +1,38 @@
+#!/bin/sh
+set -e
+
+# 仅在安装了 OpenClash 且未存在 clash_meta 时执行
+[ -d /etc/openclash ] || exit 0
+
+CORE_DIR="/etc/openclash/core"
+CORE_BIN="${CORE_DIR}/clash_meta"
+
+[ -x "${CORE_BIN}" ] && exit 0
+
+mkdir -p "${CORE_DIR}"
+
+# WR3000K: aarch64 (arm64)
+# 这里用 OpenClash 官方 core 仓库的 meta 路径（raw）
+# 若你后续想做“固定版本/自建镜像”，把 URL 换成你自己的即可
+URL="https://raw.githubusercontent.com/vernesong/OpenClash/core/master/meta/clash-linux-arm64.tar.gz"
+
+TMP="/tmp/clash_meta.tar.gz"
+
+if command -v curl >/dev/null 2>&1; then
+  curl -L --connect-timeout 15 --retry 2 -o "${TMP}" "${URL}" || exit 0
+else
+  wget -T 15 -t 2 -O "${TMP}" "${URL}" || exit 0
+fi
+
+# 兼容 tar.gz 包：解压后通常包含 clash 二进制（不同版本可能命名不同）
+cd /tmp
+tar -xzf "${TMP}" || exit 0
+
+# 尝试找出二进制
+BIN_CANDIDATE="$(find /tmp -maxdepth 2 -type f -name 'clash*' -o -name 'mihomo*' 2>/dev/null | head -n 1)"
+[ -n "${BIN_CANDIDATE}" ] || exit 0
+
+cp -f "${BIN_CANDIDATE}" "${CORE_BIN}"
+chmod +x "${CORE_BIN}"
+
+exit 0

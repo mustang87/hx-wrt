@@ -1,0 +1,16 @@
+#!/bin/sh
+
+set -e
+
+# hostname / timezone
+uci set system.@system[0].hostname='hx-wr3000k'
+uci set system.@system[0].timezone='CST-8'
+uci set system.@system[0].zonename='Asia/Shanghai'
+uci commit system
+
+# mark version info (optional)
+mkdir -p /etc/hx-wrt
+[ -f /etc/hx-wrt/version ] || echo "dev" > /etc/hx-wrt/version
+[ -f /etc/hx-wrt/channel ] || echo "dev" > /etc/hx-wrt/channel
+
+exit 0

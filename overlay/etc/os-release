@@ -1,0 +1,6 @@
+NAME="HX-WRT"
+PRETTY_NAME="HX-WRT (OpenWrt)"
+ID=hx-wrt
+VERSION="dev"
+VERSION_ID="dev"
+HOME_URL="https://www.myaccelerator.vip/"

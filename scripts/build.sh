@@ -19,7 +19,7 @@ cd "${OPENWRT_DIR}"
 # 👇 加这行：按 FEATURES 调整最终 .config
 "${HXWRT_DIR}/scripts/config_tweak.sh"
 
-make -j"$(nproc)"
+make -j"$(nproc)" target/install
 
 echo "[OK] build done"
 echo "Artifacts: ${OPENWRT_DIR}/bin/targets/"

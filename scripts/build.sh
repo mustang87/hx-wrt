@@ -16,6 +16,9 @@ cd "${OPENWRT_DIR}"
 
 "${HXWRT_DIR}/scripts/config_apply.sh" "${PROFILE}"
 
+# 👇 加这行：按 FEATURES 调整最终 .config
+"${HXWRT_DIR}/scripts/config_tweak.sh"
+
 make -j"$(nproc)"
 
 echo "[OK] build done"

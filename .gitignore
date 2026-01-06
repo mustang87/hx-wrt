@@ -1,0 +1,39 @@
+# OS / Editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Local env
+.env
+.env.*
+*.local
+
+# Releases (generated)
+releases/*
+!releases/.gitkeep
+
+# Temporary / logs
+tmp/
+logs/
+*.log
+
+# If someone accidentally places OpenWrt base inside repo
+openwrt/
+bin/
+build_dir/
+staging_dir/
+dl/
+feeds/
+package/feeds/
+
+# Archives
+*.tar
+*.tar.gz
+*.tgz
+*.zip
+*.7z
+
+.cache/

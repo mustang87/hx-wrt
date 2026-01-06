@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-wlan_name="OPWRT"
+wlan_name="HX-WRT"
 wlan_password="9876543210"
 
 exec >/tmp/hx-uci-30-wifi.log 2>&1

@@ -9,7 +9,7 @@ lan_ip_address="192.168.18.1"
 exec >/tmp/hx-uci-10-brand.log 2>&1
 
 # hostname / timezone
-uci set system.@system[0].hostname='hx-wr3000k'
+uci set system.@system[0].hostname='HX-WRT'
 uci set system.@system[0].timezone='CST-8'
 uci set system.@system[0].zonename='Asia/Shanghai'
 uci commit system

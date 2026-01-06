@@ -10,5 +10,9 @@ exec >/tmp/hx-uci-90-finish.log 2>&1
 # Apply wifi (if wifi exists)
 wifi reload || wifi up || true
 
+# ✅ Ensure firewall is enabled and running
+/etc/init.d/firewall enable || true
+/etc/init.d/firewall restart || /etc/init.d/firewall start || true
+
 echo "[OK] finish done"
 exit 0

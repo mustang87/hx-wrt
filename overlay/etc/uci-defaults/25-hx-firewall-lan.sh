@@ -26,5 +26,9 @@ uci set firewall.lan.forward='ACCEPT'
 
 uci commit firewall
 
+# ✅ 关键：确保防火墙开机自启 + 立即生效
+/etc/init.d/firewall enable || true
+/etc/init.d/firewall restart || /etc/init.d/firewall start || true
+
 echo "[OK] firewall defaults + lan ready"
 exit 0

@@ -23,6 +23,9 @@ echo "[DBG] config_tweak start"
 "${HXWRT_DIR}/scripts/config_tweak.sh"
 echo "[DBG] config_tweak done"
 
+# ✅ 固化 .config（非交互、不会卡）
+make defconfig
+echo "[DBG] defconfig done"
 
 rm -f "${OPENWRT_DIR}/bin/targets/mediatek/filogic/"*tenbay_wr3000k* 2>/dev/null || true
 

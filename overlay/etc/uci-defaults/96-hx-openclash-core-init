@@ -6,9 +6,16 @@ MARK="/etc/hx-openclash-init.done"
 
 logger -t "$TAG" "start"
 
+has_openclash() {
+  [ -f /usr/lib/lua/luci/controller/openclash.lua ] && return 0
+  [ -f /etc/config/openclash ] && return 0
+  [ -d /usr/share/openclash ] && return 0
+  return 1
+}
+
 # 只在存在 OpenClash 包时执行（更可靠的判定）
-if [ ! -f /etc/config/openclash ] && [ ! -d /usr/share/openclash ]; then
-  logger -t "$TAG" "openclash not detected, skip"
+if ! has_openclash; then
+  logger -t "$TAG" "openclash not installed, skip"
   exit 0
 fi
 

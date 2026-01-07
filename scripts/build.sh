@@ -21,7 +21,7 @@ cd "${OPENWRT_DIR}"
 
 rm -f "${OPENWRT_DIR}/bin/targets/mediatek/filogic/"*tenbay_wr3000k* 2>/dev/null || true
 
-make -j"$(nproc)" target/install
+make -j"$(nproc)"
 
 echo "[OK] build done"
 echo "Artifacts: ${OPENWRT_DIR}/bin/targets/"

@@ -14,6 +14,11 @@ cd "${OPENWRT_DIR}"
 rm -rf files
 cp -a "${HXWRT_DIR}/overlay" files
 
+# ensure uci-defaults are executable
+if [ -d "files/etc/uci-defaults" ]; then
+  chmod +x files/etc/uci-defaults/* || true
+fi
+
 # 2) 注入自定义 package（你的包）
 mkdir -p package/hx
 rm -rf package/hx/hx-brand

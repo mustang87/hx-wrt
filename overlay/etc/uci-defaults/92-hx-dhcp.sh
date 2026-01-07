@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-exec >/tmp/hx-uci-40-dhcp.log 2>&1
+exec >/tmp/hx-uci-92-dhcp.log 2>&1
 
 # Set DHCP for LAN (地址池 + 启用)
 uci set dhcp.lan.start='100'

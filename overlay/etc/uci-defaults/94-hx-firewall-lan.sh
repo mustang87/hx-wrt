@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-exec >/tmp/hx-uci-25-firewall.log 2>&1
+exec >/tmp/hx-uci-94-firewall.log 2>&1
 
 # 清理旧的（防止重复刷/重复执行残留）
 uci -q delete firewall.@defaults[0] || true

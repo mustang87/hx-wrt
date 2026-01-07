@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-exec >/tmp/hx-uci-50-apk.log 2>&1
+exec >/tmp/hx-uci-95-apk.log 2>&1
 
 LIST="/etc/apk/repositories.d/distfeeds.list"
 

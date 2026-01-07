@@ -10,6 +10,15 @@ CACHE_DIR="${HXWRT_DIR}/.cache/sources"
 
 cd "${OPENWRT_DIR}"
 
+
+# 0) 生成 OpenClash init-run 到 overlay（避免 repo 的 bin/ 被 gitignore 误伤）
+if [ -f "${HXWRT_DIR}/scripts/openclash/hx-openclash-init-run" ]; then
+  mkdir -p "${HXWRT_DIR}/overlay/usr/bin"
+  install -m 0755 \
+    "${HXWRT_DIR}/scripts/openclash/hx-openclash-init-run" \
+    "${HXWRT_DIR}/overlay/usr/bin/hx-openclash-init-run"
+fi
+
 # 1) 注入 overlay -> OpenWrt 的 files/
 rm -rf files
 cp -a "${HXWRT_DIR}/overlay" files

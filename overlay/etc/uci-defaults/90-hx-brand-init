@@ -6,7 +6,7 @@ wlan_password="9876543210"
 root_password="admin"
 lan_ip_address="192.168.18.1"
 
-exec >/tmp/hx-uci-10-brand.log 2>&1
+exec >/tmp/hx-uci-90-brand.log 2>&1
 
 # hostname / timezone
 uci set system.@system[0].hostname='HX-WRT'

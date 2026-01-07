@@ -3,7 +3,7 @@ set -e
 
 lan_ip_address="192.168.18.1"
 
-exec >/tmp/hx-uci-20-lan.log 2>&1
+exec >/tmp/hx-uci-91-network.log 2>&1
 
 # Configure LAN (IP + netmask 必须设置！)
 if [ -n "$lan_ip_address" ]; then

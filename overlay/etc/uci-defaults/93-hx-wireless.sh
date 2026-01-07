@@ -4,7 +4,7 @@ set -e
 wlan_name="HX-WRT"
 wlan_password="9876543210"
 
-exec >/tmp/hx-uci-30-wifi.log 2>&1
+exec >/tmp/hx-uci-93-wireless.log 2>&1
 
 # 保护：密码不足 8 位就不配 wifi
 if [ -z "$wlan_name" ] || [ -z "$wlan_password" ] || [ ${#wlan_password} -lt 8 ]; then

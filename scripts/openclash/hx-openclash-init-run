@@ -1,0 +1,89 @@
+#!/bin/sh
+set -eu
+
+LOG="/tmp/hx-openclash-init-run.log"
+TAG="hx-openclash-init"
+MARK="/etc/hx-openclash-init.done"
+
+echo "[$(date -Is)] run start" >> "$LOG"
+
+has_openclash() {
+  [ -f /usr/lib/lua/luci/controller/openclash.lua ] && return 0
+  [ -f /etc/config/openclash ] && return 0
+  [ -d /usr/share/openclash ] && return 0
+  return 1
+}
+
+if ! has_openclash; then
+  echo "[$(date -Is)] openclash not installed, exit" >> "$LOG"
+  exit 0
+fi
+
+# 已完成就退出
+if [ -f "$MARK" ]; then
+  echo "[$(date -Is)] already done, exit" >> "$LOG"
+  exit 0
+fi
+
+# 网络/DNS 简单探活（避免首启无网直接失败）
+if ! ping -c 1 -W 1 223.5.5.5 >/dev/null 2>&1; then
+  echo "[$(date -Is)] network not ready, retry next boot" >> "$LOG"
+  exit 1
+fi
+
+fetch() {
+  url="$1"
+  out="$2"
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSL --connect-timeout 15 --retry 2 -o "$out" "$url"
+  else
+    wget -T 15 -t 2 -O "$out" "$url"
+  fi
+}
+
+OC_DIR="/etc/openclash"
+CORE_DIR="${OC_DIR}/core"
+CORE_BIN="${CORE_DIR}/clash_meta"
+mkdir -p "$CORE_DIR"
+
+# 1) core
+if [ ! -x "$CORE_BIN" ]; then
+  URL_CORE_TGZ="https://raw.githubusercontent.com/vernesong/OpenClash/core/master/meta/clash-linux-arm64.tar.gz"
+  TMP_TGZ="/tmp/clash_meta.tar.gz"
+  echo "[$(date -Is)] downloading core: $URL_CORE_TGZ" >> "$LOG"
+
+  fetch "$URL_CORE_TGZ" "$TMP_TGZ" || { echo "[$(date -Is)] core download failed" >> "$LOG"; exit 1; }
+
+  rm -rf /tmp/oc_core_extract
+  mkdir -p /tmp/oc_core_extract
+  tar -xzf "$TMP_TGZ" -C /tmp/oc_core_extract || { echo "[$(date -Is)] core extract failed" >> "$LOG"; exit 1; }
+
+  BIN_CANDIDATE="$(find /tmp/oc_core_extract -maxdepth 2 -type f \( -name 'clash*' -o -name 'mihomo*' \) 2>/dev/null | head -n 1 || true)"
+  if [ -z "$BIN_CANDIDATE" ]; then
+    echo "[$(date -Is)] core binary not found" >> "$LOG"
+    exit 1
+  fi
+
+  cp -f "$BIN_CANDIDATE" "$CORE_BIN"
+  chmod +x "$CORE_BIN"
+  echo "[$(date -Is)] core installed: $CORE_BIN" >> "$LOG"
+else
+  echo "[$(date -Is)] core already exists" >> "$LOG"
+fi
+
+# 2) Geo
+mkdir -p "$OC_DIR"
+URL_GEOIP="https://raw.githubusercontent.com/Loyalsoldier/v2ray-rules-dat/release/geoip.dat"
+URL_GEOSITE="https://raw.githubusercontent.com/Loyalsoldier/v2ray-rules-dat/release/geosite.dat"
+URL_MMDB="https://raw.githubusercontent.com/Loyalsoldier/geoip/release/Country.mmdb"
+
+echo "[$(date -Is)] downloading geo files" >> "$LOG"
+fetch "$URL_GEOIP"   "${OC_DIR}/GeoIP.dat"    || echo "[$(date -Is)] GeoIP download failed" >> "$LOG"
+fetch "$URL_GEOSITE" "${OC_DIR}/GeoSite.dat"  || echo "[$(date -Is)] GeoSite download failed" >> "$LOG"
+fetch "$URL_MMDB"    "${OC_DIR}/Country.mmdb" || echo "[$(date -Is)] mmdb download failed" >> "$LOG"
+
+date > "$MARK"
+echo "[$(date -Is)] done, mark written: $MARK" >> "$LOG"
+logger -t "$TAG" "done (see $LOG)"
+
+exit 0

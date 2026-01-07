@@ -38,4 +38,17 @@ if has_feature "argon"; then
   chmod +x files/etc/uci-defaults/15-hx-luci-theme.sh
 fi
 
+# 4) 可选：OpenClash（FEATURES=openclash）
+if has_feature "openclash"; then
+  echo "[FEATURE] openclash enabled"
+
+  mkdir -p package/hx/thirdparty
+  rm -rf package/hx/thirdparty/luci-app-openclash
+
+  # OpenClash 仓库里真正的 OpenWrt package 目录叫 luci-app-openclash
+  cp -a "${CACHE_DIR}/luci-app-openclash/luci-app-openclash" \
+        package/hx/thirdparty/luci-app-openclash
+fi
+
+
 echo "[OK] injected overlay/package (+features)"

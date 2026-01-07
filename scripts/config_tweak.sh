@@ -38,10 +38,10 @@ fi
 
 # ---- Feature: openclash ----
 if has_feature "openclash"; then
-  echo "[HX-WRT] enable OpenClash deps"
+  echo "[FEATURE] enable openclash"
 
-  # OpenClash 本体（如果你准备下一步再加，也可以先不启用）
-  # kset CONFIG_PACKAGE_openclash y
+  # OpenClash LuCI App（正确包名）
+  kset CONFIG_PACKAGE_luci-app-openclash y
   kset CONFIG_PACKAGE_luci-compat y
 
   # Kernel deps
@@ -50,7 +50,7 @@ if has_feature "openclash"; then
   kset CONFIG_PACKAGE_kmod-nft-tproxy y
   kset CONFIG_PACKAGE_kmod-nf-conntrack-netlink y
 
-  # Runtime deps
+  # Runtime deps（先按你现在需要的）
   kset CONFIG_PACKAGE_bash y
   kset CONFIG_PACKAGE_dnsmasq-full y
   kset CONFIG_PACKAGE_curl y
@@ -58,13 +58,14 @@ if has_feature "openclash"; then
   kset CONFIG_PACKAGE_ip-full y
   kset CONFIG_PACKAGE_unzip y
 
-  # ruby（你要的话就打开）
+  # ruby（你要就开）
   kset CONFIG_PACKAGE_ruby y
   kset CONFIG_PACKAGE_ruby-yaml y
-else
-  echo "[HX-WRT] disable OpenClash deps"
 
-  # kset CONFIG_PACKAGE_openclash n
+else
+  echo "[FEATURE] disable openclash"
+
+  kset CONFIG_PACKAGE_luci-app-openclash n
   kset CONFIG_PACKAGE_luci-compat n
   kset CONFIG_PACKAGE_kmod-tun n
   kset CONFIG_PACKAGE_kmod-inet-diag n
@@ -79,6 +80,7 @@ else
   kset CONFIG_PACKAGE_ruby n
   kset CONFIG_PACKAGE_ruby-yaml n
 fi
+
 
 
 echo "[HX-WRT] config_tweak done (no make here)"

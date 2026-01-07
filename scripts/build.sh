@@ -6,6 +6,8 @@ PROFILE="${1:-hx-wrt-wr3000k-dev}"
 
 "${HXWRT_DIR}/scripts/openwrt_fetch.sh"
 "${HXWRT_DIR}/scripts/prepare_tree.sh"
+"${HXWRT_DIR}/scripts/openwrt_patch.sh"
+
 
 cd "${OPENWRT_DIR}"
 

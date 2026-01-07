@@ -1,0 +1,30 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+Subject: [PATCH] mediatek: tenbay wr3000k: enlarge ubi for bigger overlay
+---
+ target/linux/mediatek/dts/mt7981b-tenbay-wr3000k.dts | 10 +---------
+ 1 file changed, 1 insertion(+), 9 deletions(-)
+
+diff --git a/target/linux/mediatek/dts/mt7981b-tenbay-wr3000k.dts b/target/linux/mediatek/dts/mt7981b-tenbay-wr3000k.dts
+index 1111111111..2222222222 100644
+--- a/target/linux/mediatek/dts/mt7981b-tenbay-wr3000k.dts
++++ b/target/linux/mediatek/dts/mt7981b-tenbay-wr3000k.dts
+@@ -210,18 +210,10 @@
+ 
+                        partition@580000 {
+                                label = "ubi";
+                                compatible = "linux,ubi";
+-                               reg = <0x580000 0x3000000>;
++                               reg = <0x580000 0x6000000>;
+                        };
+ 
+-                       partition@3580000 {
+-                           label = "ubi1";
+-                           reg = <0x3580000 0x3000000>;
+-                       };
+-
+                        partition@6580000 {
+                                label = "Product";
+                                reg = <0x6580000 0x0020000>;  // 128 KB
+                        };
+--
+2.0.0

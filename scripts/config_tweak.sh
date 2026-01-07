@@ -27,12 +27,19 @@ kset CONFIG_PACKAGE_luci-i18n-firewall-zh-cn y
 kset CONFIG_PACKAGE_luci-i18n-package-manager-zh-cn y
 kset CONFIG_PACKAGE_luci-i18n-attendedsysupgrade-zh-cn y
 
+# ---- Feature: argon ----
 if has_feature "argon"; then
   echo "[HX-WRT] enable argon (FEATURES=${FEATURES})"
   kset CONFIG_PACKAGE_luci-theme-argon y
 else
   echo "[HX-WRT] disable argon (FEATURES=${FEATURES})"
   kset CONFIG_PACKAGE_luci-theme-argon n
+fi
+  
+# ---- Feature: openclash ----
+if has_feature "openclash"; then
+  kset CONFIG_PACKAGE_openclash y
+  kset CONFIG_PACKAGE_luci-compat y
 fi
 
 echo "[HX-WRT] config_tweak done (no make here)"

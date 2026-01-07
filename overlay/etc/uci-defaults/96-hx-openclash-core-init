@@ -1,38 +1,81 @@
 #!/bin/sh
-set -e
+set -eu
 
-# 仅在安装了 OpenClash 且未存在 clash_meta 时执行
-[ -d /etc/openclash ] || exit 0
+TAG="hx-openclash-init"
+MARK="/etc/hx-openclash-init.done"
 
-CORE_DIR="/etc/openclash/core"
-CORE_BIN="${CORE_DIR}/clash_meta"
+logger -t "$TAG" "start"
 
-[ -x "${CORE_BIN}" ] && exit 0
-
-mkdir -p "${CORE_DIR}"
-
-# WR3000K: aarch64 (arm64)
-# 这里用 OpenClash 官方 core 仓库的 meta 路径（raw）
-# 若你后续想做“固定版本/自建镜像”，把 URL 换成你自己的即可
-URL="https://raw.githubusercontent.com/vernesong/OpenClash/core/master/meta/clash-linux-arm64.tar.gz"
-
-TMP="/tmp/clash_meta.tar.gz"
-
-if command -v curl >/dev/null 2>&1; then
-  curl -L --connect-timeout 15 --retry 2 -o "${TMP}" "${URL}" || exit 0
-else
-  wget -T 15 -t 2 -O "${TMP}" "${URL}" || exit 0
+# 只在存在 OpenClash 包时执行（更可靠的判定）
+if [ ! -f /etc/config/openclash ] && [ ! -d /usr/share/openclash ]; then
+  logger -t "$TAG" "openclash not detected, skip"
+  exit 0
 fi
 
-# 兼容 tar.gz 包：解压后通常包含 clash 二进制（不同版本可能命名不同）
-cd /tmp
-tar -xzf "${TMP}" || exit 0
+# 避免重复跑
+if [ -f "$MARK" ]; then
+  logger -t "$TAG" "already done, skip"
+  exit 0
+fi
 
-# 尝试找出二进制
-BIN_CANDIDATE="$(find /tmp -maxdepth 2 -type f -name 'clash*' -o -name 'mihomo*' 2>/dev/null | head -n 1)"
-[ -n "${BIN_CANDIDATE}" ] || exit 0
+OC_DIR="/etc/openclash"
+CORE_DIR="${OC_DIR}/core"
+CORE_BIN="${CORE_DIR}/clash_meta"
 
-cp -f "${BIN_CANDIDATE}" "${CORE_BIN}"
-chmod +x "${CORE_BIN}"
+mkdir -p "$CORE_DIR"
+
+# 选择下载工具
+fetch() {
+  url="$1"
+  out="$2"
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSL --connect-timeout 15 --retry 2 -o "$out" "$url"
+  else
+    wget -T 15 -t 2 -O "$out" "$url"
+  fi
+}
+
+# 1) 下载并安装 clash_meta core（arm64: WR3000K / mt7981 通常是 aarch64）
+if [ ! -x "$CORE_BIN" ]; then
+  URL_CORE_TGZ="https://raw.githubusercontent.com/vernesong/OpenClash/core/master/meta/clash-linux-arm64.tar.gz"
+  TMP_TGZ="/tmp/clash_meta.tar.gz"
+
+  logger -t "$TAG" "downloading core: $URL_CORE_TGZ"
+  fetch "$URL_CORE_TGZ" "$TMP_TGZ" || { logger -t "$TAG" "core download failed"; exit 0; }
+
+  rm -rf /tmp/oc_core_extract
+  mkdir -p /tmp/oc_core_extract
+  tar -xzf "$TMP_TGZ" -C /tmp/oc_core_extract || { logger -t "$TAG" "core extract failed"; exit 0; }
+
+  BIN_CANDIDATE="$(find /tmp/oc_core_extract -maxdepth 2 -type f \( -name 'clash*' -o -name 'mihomo*' \) 2>/dev/null | head -n 1 || true)"
+  if [ -z "$BIN_CANDIDATE" ]; then
+    logger -t "$TAG" "core binary not found in tgz"
+    exit 0
+  fi
+
+  cp -f "$BIN_CANDIDATE" "$CORE_BIN"
+  chmod +x "$CORE_BIN"
+  logger -t "$TAG" "core installed: $CORE_BIN"
+else
+  logger -t "$TAG" "core already exists: $CORE_BIN"
+fi
+
+# 2) 初始化 GeoIP / GeoSite / Country.mmdb（放到 /etc/openclash 下）
+# 注意：不同 OpenClash 版本命名略有差异，但这三个文件放这里基本都能被识别/复用
+mkdir -p "$OC_DIR"
+
+URL_GEOIP="https://raw.githubusercontent.com/Loyalsoldier/v2ray-rules-dat/release/geoip.dat"
+URL_GEOSITE="https://raw.githubusercontent.com/Loyalsoldier/v2ray-rules-dat/release/geosite.dat"
+URL_MMDB="https://raw.githubusercontent.com/Loyalsoldier/geoip/release/Country.mmdb"
+
+# 你也可以改成你自己的镜像域名（强烈建议）
+logger -t "$TAG" "downloading GeoIP/GeoSite/mmdb"
+fetch "$URL_GEOIP"   "${OC_DIR}/GeoIP.dat"       || logger -t "$TAG" "GeoIP download failed"
+fetch "$URL_GEOSITE" "${OC_DIR}/GeoSite.dat"     || logger -t "$TAG" "GeoSite download failed"
+fetch "$URL_MMDB"    "${OC_DIR}/Country.mmdb"    || logger -t "$TAG" "mmdb download failed"
+
+# 标记完成
+date > "$MARK"
+logger -t "$TAG" "done"
 
 exit 0

@@ -8,9 +8,9 @@ if ! uci -q get firewall.@defaults[0] >/dev/null; then
   uci add firewall defaults
 fi
 
-uci set firewall.@defaults[0].input='REJECT'
-uci set firewall.@defaults[0].output='ACCEPT'
-uci set firewall.@defaults[0].forward='REJECT'
+# uci set firewall.@defaults[0].input='REJECT'
+# uci set firewall.@defaults[0].output='ACCEPT'
+# uci set firewall.@defaults[0].forward='REJECT'
 
 # Ensure lan zone exists
 if ! uci -q get firewall.lan >/dev/null; then

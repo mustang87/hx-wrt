@@ -14,10 +14,15 @@ cd "${OPENWRT_DIR}"
 ./scripts/feeds update openclash || true
 ./scripts/feeds install -a -p openclash || true
 
+echo "[DBG] config_apply start"
 "${HXWRT_DIR}/scripts/config_apply.sh" "${PROFILE}"
+echo "[DBG] config_apply done"
 
 # 👇 加这行：按 FEATURES 调整最终 .config
+echo "[DBG] config_tweak start"
 "${HXWRT_DIR}/scripts/config_tweak.sh"
+echo "[DBG] config_tweak done"
+
 
 rm -f "${OPENWRT_DIR}/bin/targets/mediatek/filogic/"*tenbay_wr3000k* 2>/dev/null || true
 

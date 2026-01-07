@@ -41,7 +41,7 @@ else
   kset CONFIG_PACKAGE_luci-theme-argon n
 fi
 
-# 关键：用非交互 oldconfig 固化配置，避免弹 menu
-yes "" | make oldconfig >/dev/null
+# 关键：固化依赖（非交互）
+make defconfig
 
 echo "[OK] config tweak applied"

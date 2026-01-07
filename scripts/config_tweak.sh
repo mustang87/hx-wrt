@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
+
 source "$(dirname "$0")/env.sh"
-source "$(dirname "$0")/features.sh"
 
 cd "${OPENWRT_DIR}"
 
@@ -9,7 +9,7 @@ kset() {
   local sym="$1"
   local val="$2"
 
-  # 删除旧值（y/m/n 或 not set）
+  # 清理旧定义
   sed -i -E "/^${sym}=.*/d" .config
   sed -i -E "/^# ${sym} is not set$/d" .config
 
@@ -21,27 +21,22 @@ kset() {
       echo "# ${sym} is not set" >> .config
       ;;
     *)
-      echo "Invalid val: ${val} (use y/m/n)" >&2
+      echo "Invalid val: ${val}" >&2
       exit 1
       ;;
   esac
 }
 
-# ---- Always-on: LuCI Chinese ----
+echo "[HX-WRT] enable LuCI zh-cn (always-on)"
+
+# ===== LuCI Chinese (核心 + 常用模块) =====
 kset CONFIG_PACKAGE_luci-i18n-base-zh-cn y
 kset CONFIG_PACKAGE_luci-i18n-firewall-zh-cn y
+kset CONFIG_PACKAGE_luci-i18n-network-zh-cn y
+kset CONFIG_PACKAGE_luci-i18n-system-zh-cn y
 kset CONFIG_PACKAGE_luci-i18n-package-manager-zh-cn y
 
-# ---- Feature: argon ----
-if has_feature "argon"; then
-  echo "[FEATURE] enable argon"
-  kset CONFIG_PACKAGE_luci-theme-argon y
-else
-  echo "[FEATURE] disable argon"
-  kset CONFIG_PACKAGE_luci-theme-argon n
-fi
+# 固化，避免 menuconfig 弹窗 & 覆盖
+yes "" | make oldconfig >/dev/null
 
-# 关键：固化依赖（非交互）
-make defconfig
-
-echo "[OK] config tweak applied"
+echo "[HX-WRT] LuCI zh-cn applied"

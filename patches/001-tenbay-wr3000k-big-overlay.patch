@@ -1,11 +1,22 @@
 diff --git a/target/linux/mediatek/dts/mt7981b-tenbay-wr3000k.dts b/target/linux/mediatek/dts/mt7981b-tenbay-wr3000k.dts
+index a7bef17344..8db5a132b3 100644
 --- a/target/linux/mediatek/dts/mt7981b-tenbay-wr3000k.dts
 +++ b/target/linux/mediatek/dts/mt7981b-tenbay-wr3000k.dts
-@@ -1,1 +1,1 @@
+@@ -210,15 +210,8 @@
+                        partition@580000 {
+                                label = "ubi";
+                                compatible = "linux,ubi";
 -                               reg = <0x580000 0x3000000>;
-+                               reg = <0x580000 0x6000000>;
-@@ -1,5 +1,0 @@
+-                       };
+-
 -                       partition@3580000 {
 -                           label = "ubi1";
 -                           reg = <0x3580000 0x3000000>;
 -                       };
+-
+-                       partition@6580000 {
++                               reg = <0x580000 0x6000000>;
++                       };                      partition@6580000 {
+                                label = "Product";
+                                reg = <0x6580000 0x0020000>;  // 128 KB
+                        };

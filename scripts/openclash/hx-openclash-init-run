@@ -34,12 +34,17 @@ fi
 fetch() {
   url="$1"
   out="$2"
+  echo "[$(date -Is)] fetch: $url -> $out" >> "$LOG"
+
   if command -v curl >/dev/null 2>&1; then
-    curl -fsSL --connect-timeout 15 --retry 2 -o "$out" "$url"
+    curl -4 -fSL --connect-timeout 15 --max-time 60 -o "$out" "$url" >>"$LOG" 2>&1 || return 1
   else
-    wget -T 15 -t 2 -O "$out" "$url"
+    wget -4 -O "$out" -T 60 "$url" >>"$LOG" 2>&1 || return 1
   fi
+  return 0
 }
+
+
 
 OC_DIR="/etc/openclash"
 CORE_DIR="${OC_DIR}/core"

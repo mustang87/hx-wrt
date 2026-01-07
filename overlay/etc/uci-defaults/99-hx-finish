@@ -8,11 +8,11 @@ exec >/tmp/hx-uci-90-finish.log 2>&1
 /etc/init.d/dnsmasq restart || true
 
 # # Apply wifi (if wifi exists)
-# wifi reload || wifi up || true
+wifi reload || wifi up || true
 
 # # ✅ Ensure firewall is enabled and running
-# /etc/init.d/firewall enable || true
-# /etc/init.d/firewall restart || /etc/init.d/firewall start || true
+/etc/init.d/firewall enable || true
+/etc/init.d/firewall restart || /etc/init.d/firewall start || true
 # /etc/init.d/rpcd restart || true
 /etc/init.d/uhttpd restart || true
 

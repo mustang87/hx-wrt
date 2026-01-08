@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
-source "$(dirname "$0")/../../env.sh"
+
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/env.sh"
 source "${HXWRT_DIR}/scripts/lib/build_lock.sh"
 
 read_state() {

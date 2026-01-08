@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
-source "$(dirname "$0")/../../env.sh"
+
+# scripts/lib -> scripts
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/env.sh"
+ 
 
 PROFILE="${1:-hx-wrt-wr3000k-dev}"
 LOG_FILE="${2:-}"

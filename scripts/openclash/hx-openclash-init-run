@@ -162,6 +162,7 @@ download_geo() {
 # =========================
 # Main
 # =========================
+exec > "$LOG" 2>/dev/null || true
 log "run start"
 
 if ! has_openclash; then
@@ -169,20 +170,20 @@ if ! has_openclash; then
   exit 0
 fi
 
-# wait custom mount (max 30s)
+# wait custom mount (max 90s)
 i=0
-while ! mountpoint -q /mnt/custom; do
+while ! grep -qs " ${CUSTOM_MNT} " /proc/mounts; do
   i=$((i+1))
-  [ "$i" -ge 30 ] && break
+  [ "$i" -ge 90 ] && break
   sleep 1
 done
 
-
-# 必须先挂载 custom，否则不做任何写入（避免写爆 overlay）
-if ! mountpoint -q "$CUSTOM_MNT"; then
-  log "/mnt/custom not mounted, exit (wait next boot)"
+if ! grep -qs " ${CUSTOM_MNT} " /proc/mounts; then
+  log "${CUSTOM_MNT} not mounted, exit (wait next boot)"
   exit 1
 fi
+
+
 
 # core 必须是软链（由 hx-storage 负责创建）
 if [ ! -L "$CORE_DIR" ]; then

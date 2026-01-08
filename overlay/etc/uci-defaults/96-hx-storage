@@ -1,27 +1,104 @@
-#!/bin/sh
-# hx-wrt: enable hx-storage service and do one-time migration for OpenClash core
+#!/bin/sh /etc/rc.common
+START=12
+STOP=90
 
-set -e
+CUSTOM_MTD_NUM="7"
+CUSTOM_MTD="/dev/mtd${CUSTOM_MTD_NUM}"
 
-INIT="/etc/init.d/hx-storage"
-OC_ETC="/etc/openclash"
+UBI_DEV_ID="2"
+UBI_DEV="/dev/ubi${UBI_DEV_ID}"
+UBI_VOL_NAME="custom"
 MNT="/mnt/custom"
-OC_CUSTOM="${MNT}/openclash"
 
-# Enable service
-[ -x "${INIT}" ] && "${INIT}" enable || true
+OC_ETC="/etc/openclash"
+OC_TMP="/tmp/openclash"
 
-# Start once during first boot to mount custom and create links
-[ -x "${INIT}" ] && "${INIT}" start || true
+log() { logger -t hx-storage "$*"; echo "[hx-storage] $*"; }
 
-# One-time: if core exists in /etc/openclash/core and custom core empty, migrate
-if [ -d "${OC_ETC}/core" ] && [ ! -L "${OC_ETC}/core" ]; then
-  mkdir -p "${OC_CUSTOM}/core" || true
-  if [ -z "$(ls -A "${OC_CUSTOM}/core" 2>/dev/null)" ]; then
-    mv "${OC_ETC}/core/"* "${OC_CUSTOM}/core/" 2>/dev/null || true
+# BusyBox-safe mount check (no mountpoint command needed)
+is_mounted() { grep -qs " ${1} " /proc/mounts; }
+
+ensure_dirs() {
+  mkdir -p "${MNT}" \
+           "${OC_ETC}" \
+           "${OC_TMP}/geo" "${OC_TMP}/cache" "${OC_TMP}/log" \
+           "${MNT}/openclash/core" "${MNT}/openclash/state" >/dev/null 2>&1 || true
+}
+
+attach_custom_ubi() {
+  [ -c "${UBI_DEV}" ] && return 0
+
+  ubidetach -p "${CUSTOM_MTD}" >/dev/null 2>&1 || true
+
+  if ubiattach -m "${CUSTOM_MTD_NUM}" -d "${UBI_DEV_ID}" >/dev/null 2>&1; then
+    return 0
   fi
-  rm -rf "${OC_ETC}/core" 2>/dev/null || true
-  ln -snf "${OC_CUSTOM}/core" "${OC_ETC}/core"
-fi
 
-exit 0
+  ubiattach -m "${CUSTOM_MTD_NUM}" >/dev/null 2>&1 && return 0
+  return 1
+}
+
+ensure_ubifs_volume() {
+  if ubinfo "${UBI_DEV}" -N "${UBI_VOL_NAME}" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  # Custom 16MiB 很紧：创建 12MiB 卷更稳
+  ubimkvol "${UBI_DEV}" -N "${UBI_VOL_NAME}" -s 12MiB >/dev/null 2>&1
+}
+
+mount_custom() {
+  is_mounted "${MNT}" && return 0
+  mount -t ubifs "ubi${UBI_DEV_ID}:${UBI_VOL_NAME}" "${MNT}" >/dev/null 2>&1
+}
+
+link_openclash_paths() {
+  # core -> custom
+  if [ -d "${OC_ETC}/core" ] && [ ! -L "${OC_ETC}/core" ]; then
+    if [ -z "$(ls -A "${MNT}/openclash/core" 2>/dev/null)" ]; then
+      mv "${OC_ETC}/core/"* "${MNT}/openclash/core/" 2>/dev/null || true
+    fi
+    rm -rf "${OC_ETC}/core" 2>/dev/null || true
+  fi
+  ln -snf "${MNT}/openclash/core" "${OC_ETC}/core"
+
+  # GEO -> tmpfs
+  ln -sf "${OC_TMP}/geo/GeoIP.dat"    "${OC_ETC}/GeoIP.dat"
+  ln -sf "${OC_TMP}/geo/GeoSite.dat"  "${OC_ETC}/GeoSite.dat"
+  ln -sf "${OC_TMP}/geo/Country.mmdb" "${OC_ETC}/Country.mmdb"
+
+  # cache -> tmpfs
+  if [ -e "${OC_ETC}/cache" ] && [ ! -L "${OC_ETC}/cache" ]; then
+    rm -rf "${OC_ETC}/cache" 2>/dev/null || true
+  fi
+  ln -snf "${OC_TMP}/cache" "${OC_ETC}/cache"
+}
+
+start() {
+  log "start"
+  ensure_dirs
+
+  if ! attach_custom_ubi; then
+    log "ERROR: ubiattach mtd${CUSTOM_MTD_NUM} failed"
+    return 1
+  fi
+
+  ensure_ubifs_volume || true
+
+  if ! mount_custom; then
+    log "ERROR: mount custom ubifs failed"
+    return 1
+  fi
+
+  ensure_dirs
+  link_openclash_paths
+
+  log "OK: custom mounted at ${MNT}; openclash core->custom; geo/cache->tmpfs"
+  return 0
+}
+
+stop() {
+  log "stop"
+  umount "${MNT}" >/dev/null 2>&1 || true
+  ubidetach -p "${CUSTOM_MTD}" >/dev/null 2>&1 || true
+}

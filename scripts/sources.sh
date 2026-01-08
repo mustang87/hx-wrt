@@ -72,3 +72,35 @@ while IFS='|' read -r name url ref; do
 
   fetch_one "${name}" "${url}" "${ref}"
 done < "${LOCK_FILE}"
+
+
+ensure_feeds_mirror() {
+  local f="${OPENWRT_DIR}/feeds.conf.default"
+  [ -f "$f" ] || return 0
+
+  # 仅当包含 git.openwrt.org 时才替换
+  if grep -q "git.openwrt.org" "$f"; then
+    echo "[FEEDS] switch git.openwrt.org -> github mirror"
+    sed -i 's#https://git.openwrt.org/feed/packages.git#https://github.com/openwrt/packages.git#g' "$f"
+    sed -i 's#https://git.openwrt.org/feed/routing.git#https://github.com/openwrt/routing.git#g' "$f"
+    sed -i 's#https://git.openwrt.org/feed/telephony.git#https://github.com/openwrt/telephony.git#g' "$f"
+    sed -i 's#https://git.openwrt.org/project/luci.git#https://github.com/openwrt/luci.git#g' "$f"
+  fi
+}
+
+feeds_update_with_fallback() {
+  cd "${OPENWRT_DIR}"
+
+  echo "[FEEDS] update -a"
+  if ./scripts/feeds update -a; then
+    return 0
+  fi
+
+  echo "[FEEDS] update failed, applying mirror + retry..."
+  ensure_feeds_mirror
+
+  ./scripts/feeds clean || true
+  rm -rf feeds/packages feeds/routing feeds/luci feeds/telephony || true
+
+  ./scripts/feeds update -a
+}

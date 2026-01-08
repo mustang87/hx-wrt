@@ -1,0 +1,47 @@
+#!/bin/sh
+set -eu
+
+LOGTAG="hx-feature"
+
+enabled="$(uci -q get hx-wrt.ipv6_disable.enabled || echo 1)"
+
+if [ "$enabled" != "1" ]; then
+    logger -t "$LOGTAG" "ipv6-disable: disabled by config, skip"
+    exit 0
+fi
+
+logger -t "$LOGTAG" "ipv6-disable: applying IPv6 disable policy"
+
+# ===== Network level =====
+uci set network.lan.delegate='0'
+uci set network.wan.delegate='0'
+uci -q delete network.wan6
+uci -q delete network.globals.ula_prefix
+
+# 兼容字段（非核心，防部分衍生配置）
+uci set network.lan.ipv6='0' 2>/dev/null || true
+uci set network.wan.ipv6='0' 2>/dev/null || true
+
+uci commit network
+
+# ===== DHCP / RA =====
+uci set dhcp.lan.ra='disabled'
+uci set dhcp.lan.dhcpv6='disabled'
+uci -q delete dhcp.lan.dhcpv6
+
+# DNS 层兜底：禁止 AAAA
+uci set dhcp.@dnsmasq[0].filter_aaaa='1'
+
+uci commit dhcp
+
+# ===== Disable odhcpd =====
+/etc/init.d/odhcpd stop >/dev/null 2>&1 || true
+/etc/init.d/odhcpd disable >/dev/null 2>&1 || true
+
+# ===== Restart minimal services =====
+/etc/init.d/network restart >/dev/null 2>&1 || true
+/etc/init.d/dnsmasq reload >/dev/null 2>&1 || /etc/init.d/dnsmasq restart >/dev/null 2>&1 || true
+
+logger -t "$LOGTAG" "ipv6-disable: IPv6 disabled (network + dhcp + dns)"
+
+exit 0

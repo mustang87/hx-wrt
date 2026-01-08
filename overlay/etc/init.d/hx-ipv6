@@ -1,0 +1,40 @@
+#!/bin/sh
+set -eu
+
+usage() {
+    echo "Usage: hx-ipv6 {status|enable|disable|apply}"
+}
+
+status() {
+    echo "hx-wrt.ipv6_disable.enabled=$(uci -q get hx-wrt.ipv6_disable.enabled || echo 1)"
+    echo "network.wan6 exists: $(uci -q get network.wan6 && echo yes || echo no)"
+    echo "odhcpd enabled: $(/etc/init.d/odhcpd enabled 2>/dev/null || echo no)"
+    echo "dnsmasq filter_aaaa=$(uci -q get dhcp.@dnsmasq[0].filter_aaaa || echo 0)"
+}
+
+apply() {
+    uci set hx-wrt.ipv6_disable.enabled='1'
+    uci commit hx-wrt
+    /etc/uci-defaults/90-hx-ipv6-disable || true
+}
+
+enable() {
+    uci set hx-wrt.ipv6_disable.enabled='1'
+    uci commit hx-wrt
+    echo "IPv6 disable feature enabled (reboot or run apply)"
+}
+
+disable() {
+    uci set hx-wrt.ipv6_disable.enabled='0'
+    uci commit hx-wrt
+    echo "IPv6 disable feature disabled."
+    echo "NOTE: IPv6 recovery requires manual network config restore."
+}
+
+case "${1:-}" in
+    status) status ;;
+    apply) apply ;;
+    enable) enable ;;
+    disable) disable ;;
+    *) usage; exit 1 ;;
+esac

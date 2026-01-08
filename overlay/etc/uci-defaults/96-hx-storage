@@ -1,0 +1,27 @@
+#!/bin/sh
+# hx-wrt: enable hx-storage service and do one-time migration for OpenClash core
+
+set -e
+
+INIT="/etc/init.d/hx-storage"
+OC_ETC="/etc/openclash"
+MNT="/mnt/custom"
+OC_CUSTOM="${MNT}/openclash"
+
+# Enable service
+[ -x "${INIT}" ] && "${INIT}" enable || true
+
+# Start once during first boot to mount custom and create links
+[ -x "${INIT}" ] && "${INIT}" start || true
+
+# One-time: if core exists in /etc/openclash/core and custom core empty, migrate
+if [ -d "${OC_ETC}/core" ] && [ ! -L "${OC_ETC}/core" ]; then
+  mkdir -p "${OC_CUSTOM}/core" || true
+  if [ -z "$(ls -A "${OC_CUSTOM}/core" 2>/dev/null)" ]; then
+    mv "${OC_ETC}/core/"* "${OC_CUSTOM}/core/" 2>/dev/null || true
+  fi
+  rm -rf "${OC_ETC}/core" 2>/dev/null || true
+  ln -snf "${OC_CUSTOM}/core" "${OC_ETC}/core"
+fi
+
+exit 0

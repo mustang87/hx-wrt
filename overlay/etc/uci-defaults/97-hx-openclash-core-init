@@ -1,12 +1,11 @@
 #!/bin/sh
 set -eu
 
-LOG="/tmp/hx-uci-96-openclash.log"
+LOG="/tmp/hx-uci-97-openclash.log"
 TAG="hx-openclash-init"
 
 echo "[$(date -Is)] uci-defaults start" >> "$LOG"
 
-# 判断 OpenClash 是否存在（不要用 /etc/openclash 目录）
 has_openclash() {
   [ -f /usr/lib/lua/luci/controller/openclash.lua ] && return 0
   [ -f /etc/config/openclash ] && return 0
@@ -19,25 +18,13 @@ if ! has_openclash; then
   exit 0
 fi
 
-# ---- 必须先挂载 custom 并完成 core 目录重定向，防止写入 overlay ----
-if ! mountpoint -q /mnt/custom; then
-  echo "[$(date -Is)] /mnt/custom not mounted yet, skip" >> "$LOG"
-  exit 0
-fi
-
-if [ ! -L /etc/openclash/core ]; then
-  echo "[$(date -Is)] /etc/openclash/core is not symlink, skip" >> "$LOG"
-  exit 0
-fi
-# -------------------------------------------------------------------
-
-# 确保 run 脚本存在（你把 run 脚本也打进固件更好；这里做兜底）
+# run 脚本必须存在
 if [ ! -x /usr/bin/hx-openclash-init-run ]; then
   echo "[$(date -Is)] /usr/bin/hx-openclash-init-run missing, skip" >> "$LOG"
   exit 0
 fi
 
-# 安装 init.d（如果你已经打进固件可省略）
+# 装 init.d（如果你已经打进固件可省略）
 if [ ! -x /etc/init.d/hx-openclash-init ]; then
   cat > /etc/init.d/hx-openclash-init <<'EOF'
 #!/bin/sh /etc/rc.common
@@ -45,8 +32,8 @@ START=99
 USE_PROCD=1
 start_service() {
   procd_open_instance
-  # 延迟 60 秒，等网络和 DNS
-  procd_set_param command /bin/sh -c 'sleep 20; /usr/bin/hx-openclash-init-run'
+  # 延迟，等待 hx-storage 先把 /mnt/custom 挂好
+  procd_set_param command /bin/sh -c 'sleep 30; /usr/bin/hx-openclash-init-run'
   procd_set_param respawn 0 0 0
   procd_close_instance
 }
@@ -56,7 +43,6 @@ fi
 
 /etc/init.d/hx-openclash-init enable || true
 
-echo "[$(date -Is)] installed init.d + enabled" >> "$LOG"
-logger -t "$TAG" "uci-defaults installed init.d (see $LOG)"
-
+echo "[$(date -Is)] enabled hx-openclash-init" >> "$LOG"
+logger -t "$TAG" "uci-defaults enabled init.d (see $LOG)"
 exit 0

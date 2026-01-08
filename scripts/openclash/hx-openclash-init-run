@@ -169,6 +169,15 @@ if ! has_openclash; then
   exit 0
 fi
 
+# wait custom mount (max 30s)
+i=0
+while ! mountpoint -q /mnt/custom; do
+  i=$((i+1))
+  [ "$i" -ge 30 ] && break
+  sleep 1
+done
+
+
 # 必须先挂载 custom，否则不做任何写入（避免写爆 overlay）
 if ! mountpoint -q "$CUSTOM_MNT"; then
   log "/mnt/custom not mounted, exit (wait next boot)"

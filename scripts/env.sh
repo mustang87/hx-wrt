@@ -10,7 +10,8 @@ export OPENWRT_DIR="${WORK_DIR}/openwrt"
 
 # 默认 OpenWrt 远端 & 分支（你可随时改）
 export OPENWRT_REMOTE="${OPENWRT_REMOTE:-https://github.com/openwrt/openwrt.git}"
-export OPENWRT_BRANCH="${OPENWRT_BRANCH:-main}"
+# export OPENWRT_BRANCH="${OPENWRT_BRANCH:-main}"
+export OPENWRT_BRANCH="${OPENWRT_BRANCH:-openwrt-25.15}"
 
 # 输出目录（打包用）
 export RELEASE_DIR="${HXWRT_DIR}/releases"

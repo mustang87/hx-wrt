@@ -53,6 +53,7 @@ echo "[INFO] tmux: session=${TMUX_SESSION_NAME:-} window=${TMUX_WINDOW_NAME:-}"
 echo "============================================================"
 
 # 这一步建议放到 tee 之后，让 chmod 的输出也进日志
+chmod +x "${HXWRT_DIR}/scripts/prepare_exec.sh" 2>/dev/null || true
 "${HXWRT_DIR}/scripts/prepare_exec.sh"
 
 # 写状态文件（让 status/tail/stop 有据可查）

@@ -116,36 +116,36 @@ EOF
 #    (only if feeds/luci exists; safe across branches)
 # =========================
 patch_luci_master() {
-  local luci_root="${OPENWRT_DIR}/feeds/luci"
-  [ -d "${luci_root}" ] || { log "skip luci patch: ${luci_root} not found (feeds not updated yet?)"; return 0; }
+  patch_one_luci_root() {
+    local luci_root="$1"
+    [ -d "${luci_root}" ] || return 0
 
-  local luci_mk="${luci_root}/luci.mk"
-  if [ -f "${luci_mk}" ]; then
-    if grep -q 'variant="LuCI Master"' "${luci_mk}"; then
-      log "patch luci.mk variant: LuCI Master -> ${HXWRT_LUCI_VARIANT}"
-      sed -i 's/variant="LuCI Master"/variant="'"${HXWRT_LUCI_VARIANT}"'"/g' "${luci_mk}"
-    else
-      log "luci.mk variant already not 'LuCI Master' (skip)"
+    log "patch luci root: ${luci_root}"
+
+    local luci_mk="${luci_root}/luci.mk"
+    if [ -f "${luci_mk}" ]; then
+      if grep -q 'variant="LuCI Master"' "${luci_mk}"; then
+        log "patch luci.mk variant: LuCI Master -> ${HXWRT_LUCI_VARIANT}"
+        sed -i 's/variant="LuCI Master"/variant="'"${HXWRT_LUCI_VARIANT}"'"/g' "${luci_mk}"
+      fi
     fi
-  else
-    log "skip luci.mk patch: file not found: ${luci_mk}"
-  fi
 
-  # Patch luci-base version generator: branch from LUCI_GITBRANCH -> fixed string
-  local luci_base_mk="${luci_root}/modules/luci-base/src/Makefile"
-  if [ -f "${luci_base_mk}" ]; then
-    if grep -q "export const revision" "${luci_base_mk}"; then
-      log "patch luci-base luci.version generator: branch -> ${HXWRT_LUCI_BRANCH}"
-      # Replace only the branch assignment portion, keep revision intact
-      sed -i "s/branch = '([^']*)'/branch = '${HXWRT_LUCI_BRANCH}'/g" "${luci_base_mk}" 2>/dev/null || true
-      # For the exact pattern you showed:
-      sed -i "s/branch = '\\\$(LUCI_GITBRANCH)'/branch = '${HXWRT_LUCI_BRANCH}'/g" "${luci_base_mk}"
+    local luci_base_mk="${luci_root}/modules/luci-base/src/Makefile"
+    if [ -f "${luci_base_mk}" ]; then
+      if grep -q "branch = '\$(LUCI_GITBRANCH)'" "${luci_base_mk}"; then
+        log "patch luci-base branch: \$(LUCI_GITBRANCH) -> ${HXWRT_LUCI_BRANCH}"
+        sed -i "s/branch = '\\\$(LUCI_GITBRANCH)'/branch = '${HXWRT_LUCI_BRANCH}'/g" "${luci_base_mk}"
+      fi
     fi
-  fi
+  }
 
+  # patch both sources: feeds (source) + package/feeds (build input)
+  patch_one_luci_root "${OPENWRT_DIR}/feeds/luci"
+  patch_one_luci_root "${OPENWRT_DIR}/package/feeds/luci"
 
   log "luci patch done"
 }
+
 
 main() {
   log "start: model='${HXWRT_MODEL_SHORT}', dist='${HXWRT_DIST}', release='${HXWRT_RELEASE}', luci='${HXWRT_LUCI_VARIANT}/${HXWRT_LUCI_BRANCH}'"

@@ -87,14 +87,26 @@ EOF
   log "write overlay /etc/openwrt_version"
   echo "${HXWRT_REVISION}" > "${overlay}/etc/openwrt_version"
 
-  log "write overlay /usr/lib/os-release"
+  log "write overlay /usr/lib/os-release + /etc/os-release (with OPENWRT_* fields)"
+
+  # OPENWRT_* keys are what many OpenWrt components (and some procd builds) use to populate ubus release fields
   cat > "${overlay}/usr/lib/os-release" <<EOF
 NAME="${HXWRT_DIST}"
 VERSION="${HXWRT_RELEASE}"
 ID="hx-wrt"
 PRETTY_NAME="${HXWRT_DIST} ${HXWRT_RELEASE}"
 VERSION_ID="${HXWRT_RELEASE}"
+
+OPENWRT_RELEASE="${HXWRT_RELEASE}"
+OPENWRT_REVISION="${HXWRT_REVISION}"
+OPENWRT_BOARD="${HXWRT_TARGET}"
+OPENWRT_ARCH="${HXWRT_ARCH}"
 EOF
+
+  # force /etc/os-release to be identical (avoid split-brain)
+  mkdir -p "${overlay}/etc"
+  cp -f "${overlay}/usr/lib/os-release" "${overlay}/etc/os-release"
+
 
   log "overlay release files done (${desc})"
 }
@@ -122,22 +134,15 @@ patch_luci_master() {
   # Patch luci-base version generator: branch from LUCI_GITBRANCH -> fixed string
   local luci_base_mk="${luci_root}/modules/luci-base/src/Makefile"
   if [ -f "${luci_base_mk}" ]; then
-    if grep -q "branch = '$(LUCI_GITBRANCH)'" "${luci_base_mk}" 2>/dev/null; then
-      log "patch luci-base branch: \$(LUCI_GITBRANCH) -> ${HXWRT_LUCI_BRANCH}"
-      # only replace the branch part, keep revision intact
+    if grep -q "export const revision" "${luci_base_mk}"; then
+      log "patch luci-base luci.version generator: branch -> ${HXWRT_LUCI_BRANCH}"
+      # Replace only the branch assignment portion, keep revision intact
+      sed -i "s/branch = '([^']*)'/branch = '${HXWRT_LUCI_BRANCH}'/g" "${luci_base_mk}" 2>/dev/null || true
+      # For the exact pattern you showed:
       sed -i "s/branch = '\\\$(LUCI_GITBRANCH)'/branch = '${HXWRT_LUCI_BRANCH}'/g" "${luci_base_mk}"
-    else
-      # Some branches may have different formatting; do a more tolerant replace
-      if grep -q "LUCI_GITBRANCH" "${luci_base_mk}"; then
-        log "patch luci-base branch (tolerant): LUCI_GITBRANCH -> ${HXWRT_LUCI_BRANCH}"
-        sed -i "s/\\\$(LUCI_GITBRANCH)/${HXWRT_LUCI_BRANCH}/g" "${luci_base_mk}"
-      else
-        log "luci-base Makefile has no LUCI_GITBRANCH (skip)"
-      fi
     fi
-  else
-    log "skip luci-base patch: file not found: ${luci_base_mk}"
   fi
+
 
   log "luci patch done"
 }

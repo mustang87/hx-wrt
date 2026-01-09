@@ -84,8 +84,9 @@ echo "[DBG] brand_identity start"
 "${HXWRT_DIR}/scripts/brand_identity.sh"
 echo "[DBG] brand_identity done"
 
-# Ensure luci-base is rebuilt so luci.version reflects patched branch/variant
-make package/feeds/luci/luci-base/clean V=s || true
+echo "[DBG] force_rebuild_luci start"
+"${HXWRT_DIR}/scripts/force_rebuild_luci.sh"
+echo "[DBG] force_rebuild_luci done"
 
 echo "[DBG] config_apply start"
 "${HXWRT_DIR}/scripts/config_apply.sh" "${PROFILE}"

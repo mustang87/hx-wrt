@@ -79,6 +79,12 @@ cd "${OPENWRT_DIR}"
 ./scripts/feeds update openclash || true
 ./scripts/feeds install -a -p openclash || true
 
+# BRAND: feeds ready now, patch LuCI identity (variant/branch) reliably
+echo "[DBG] brand_identity start"
+"${HXWRT_DIR}/scripts/brand_identity.sh"
+echo "[DBG] brand_identity done"
+
+
 echo "[DBG] config_apply start"
 "${HXWRT_DIR}/scripts/config_apply.sh" "${PROFILE}"
 echo "[DBG] config_apply done"

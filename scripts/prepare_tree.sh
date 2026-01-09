@@ -10,6 +10,8 @@ CACHE_DIR="${HXWRT_DIR}/.cache/sources"
 
 cd "${OPENWRT_DIR}"
 
+# BRAND: patch model/version/luci identity (safe & idempotent)
+"${HXWRT_DIR}/scripts/brand_identity.sh"
 
 # 0) 生成 OpenClash init-run 到 overlay（避免 repo 的 bin/ 被 gitignore 误伤）
 if [ -f "${HXWRT_DIR}/scripts/openclash/hx-openclash-init-run" ]; then

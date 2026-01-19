@@ -5,14 +5,13 @@ exec >/tmp/hx-uci-95-apk.log 2>&1
 
 LIST="/etc/apk/repositories.d/distfeeds.list"
 USTC_BASE="https://mirrors.ustc.edu.cn/openwrt"
-SNAPSHOT_URL="${USTC_BASE}/snapshots"
 
-echo "[INFO] hx-apk-mirror start"
+echo "[INFO] hx-apk-mirror start: $(date -Is 2>/dev/null || date)"
 
-# 备份原文件
+# 备份原文件（可选）
 if [ -f "$LIST" ] && [ ! -f "${LIST}.bak" ]; then
   cp "$LIST" "${LIST}.bak" || true
-  echo "[OK] backup created"
+  echo "[OK] backup created: ${LIST}.bak"
 fi
 
 if [ ! -f "$LIST" ]; then
@@ -20,20 +19,24 @@ if [ ! -f "$LIST" ]; then
   exit 0
 fi
 
-# 统一域名 + https
+# 1) 先替换为中科大镜像，并统一 https（只改域名部分）
 sed -i 's|downloads.openwrt.org|mirrors.ustc.edu.cn/openwrt|g' "$LIST" || true
 sed -i 's|http://|https://|g' "$LIST" || true
 
-# ========= 关键逻辑 =========
-# 只要发现 snapshot / main / trunk / 25.x → 强制 snapshots
-if grep -qiE 'snapshot|snapshots|/25\.|/main|/trunk' "$LIST"; then
-  echo "[INFO] detected snapshot-style feeds, forcing snapshots"
+# 2) 判断是否应走 snapshots
+#    条件：分支为 main / 25 或 URL 中含 snapshot/SNAPSHOT
+#    注意：你的 bak 里是 releases/25.12-SNAPSHOT，所以也应命中
+if grep -qiE '(/|-)25(\.|/|-)|main|trunk|snapshot' "$LIST"; then
+  echo "[INFO] snapshot-like feeds detected, switching releases/* prefix to snapshots/* (keep suffix path)"
 
-  # 所有 releases/* / 25.x-* 统一干掉，指向 snapshots
-  sed -i -E "s|${USTC_BASE}/releases/[^/]+|${SNAPSHOT_URL}|g" "$LIST"
-  sed -i -E "s|${USTC_BASE}/snapshots.*|${SNAPSHOT_URL}|g" "$LIST"
+  # 只改“前缀”，保留后缀路径不变：
+  # https://mirrors.ustc.edu.cn/openwrt/releases/<ver>/xxx  -> https://mirrors.ustc.edu.cn/openwrt/snapshots/xxx
+  sed -i -E "s|${USTC_BASE}/releases/[^/]+/|${USTC_BASE}/snapshots/|g" "$LIST"
+
+  # 如果有人写成了 .../snapshots/<something>/... 也不去破坏，最多只确保是 /snapshots/
+  # （这一条可选；保守起见不做更深清洗）
 else
-  echo "[INFO] detected release feeds, keep releases path"
+  echo "[INFO] release feeds detected, keep releases path"
 fi
 
 echo "[OK] apk mirror updated"

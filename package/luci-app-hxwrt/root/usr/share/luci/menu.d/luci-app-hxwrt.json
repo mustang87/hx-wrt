@@ -1,0 +1,14 @@
+{
+    "admin/system/hxwrt": {
+      "title": "HX-WRT",
+      "order": 90,
+      "action": {
+        "type": "view",
+        "path": "hxwrt/settings"
+      },
+      "depends": {
+        "acl": [ "luci-app-hxwrt" ]
+      }
+    }
+  }
+  

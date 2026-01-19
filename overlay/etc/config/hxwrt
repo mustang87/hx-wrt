@@ -1,0 +1,13 @@
+config feature 'ipv6_disable'
+	option enabled '1'
+
+config contact 'main'
+    option brand 'HX-WRT'
+    option channel 'stable'
+	option brand   'HX-WRT'
+	option qq      '799717180'
+	option qqgroup '620409641'
+	option tg      '@LeoLei2026'
+	option email   'support@myaccelerator.vip'
+	option website 'https://doc.myaccelerator.vip'
+	option wechat  '-'

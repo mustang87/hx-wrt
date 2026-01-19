@@ -3,7 +3,7 @@ set -eu
 
 LOGTAG="hx-feature"
 
-enabled="$(uci -q get hx-wrt.ipv6_disable.enabled || echo 1)"
+enabled="$(uci -q get hxwrt.ipv6_disable.enabled || echo 1)"
 
 if [ "$enabled" != "1" ]; then
     logger -t "$LOGTAG" "ipv6-disable: disabled by config, skip"

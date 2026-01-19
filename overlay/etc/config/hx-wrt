@@ -1,2 +1,0 @@
-config feature 'ipv6_disable'
-    option enabled '1'

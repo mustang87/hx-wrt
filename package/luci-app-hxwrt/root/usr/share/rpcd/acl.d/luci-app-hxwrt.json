@@ -1,0 +1,12 @@
+{
+    "luci-app-hxwrt": {
+      "description": "Grant access to HX-WRT settings",
+      "read": {
+        "uci": [ "hxwrt", "hx-wrt" ]
+      },
+      "write": {
+        "uci": [ "hxwrt", "hx-wrt" ]
+      }
+    }
+  }
+  

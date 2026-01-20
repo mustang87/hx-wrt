@@ -135,8 +135,8 @@ return baseclass.extend({
 		}
 
 		// 按钮：加入 TG / 打开文档
-		var btnTG   = button('加入 TG', tgUrl);
-		var btnDocs = button('打开文档', websiteUrl);
+		// var btnTG   = button('加入 TG', tgUrl);
+		// var btnDocs = button('打开文档', websiteUrl);
 
 		return E('div', { 'class': 'cbi-section-node' }, [
 			E('div', { 'class': 'table' }, [
@@ -150,11 +150,11 @@ return baseclass.extend({
 				row('微信',     textNode(CONTACT.wechat))
 			]),
 
-			E('div', { 'style': 'margin-top:10px;' }, [
-				btnTG,
-				E('span', { 'style': 'display:inline-block; width:8px;' }, [ ' ' ]),
-				btnDocs
-			]),
+			// E('div', { 'style': 'margin-top:10px;' }, [
+			// 	btnTG,
+			// 	E('span', { 'style': 'display:inline-block; width:8px;' }, [ ' ' ]),
+			// 	btnDocs
+			// ]),
 
 			E('div', { 'class': 'cbi-value-description', 'style': 'margin-top:8px;' }, [
 				'反馈问题建议附带：截图 + logread 关键日志 + 复现步骤（定位会快很多）。'

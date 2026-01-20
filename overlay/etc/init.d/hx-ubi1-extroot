@@ -1,0 +1,49 @@
+#!/bin/sh /etc/rc.common
+START=03
+STOP=90
+
+TAG="hx-ubi1-extroot"
+MTD_NUM="5"              # mtd5: "ubi1"
+UBI_DEV_ID="1"           # /dev/ubi1
+UBI_DEV="/dev/ubi${UBI_DEV_ID}"
+VOL_NAME="extroot_overlay"
+
+log() { logger -t "$TAG" "$*"; echo "[$TAG] $*"; }
+
+attach_ubi1() {
+  [ -c "$UBI_DEV" ] && return 0
+  grep -qs '"ubi1"' /proc/mtd || return 1
+  ubidetach -m "$MTD_NUM" >/dev/null 2>&1 || true
+  ubiattach -m "$MTD_NUM" -d "$UBI_DEV_ID" >/dev/null 2>&1 && return 0
+  ubiattach -m "$MTD_NUM" >/dev/null 2>&1 && return 0
+  return 1
+}
+
+ensure_volume() {
+  ubinfo "$UBI_DEV" -N "$VOL_NAME" >/dev/null 2>&1 && return 0
+
+  # Use max available space; UBIFS will be auto-created on first mount.
+  if ubimkvol "$UBI_DEV" -N "$VOL_NAME" -m >/dev/null 2>&1; then
+    log "created UBI volume: $VOL_NAME (max)"
+    log "NOTE: extroot will take effect after a reboot"
+    return 0
+  fi
+
+  return 1
+}
+
+start() {
+  log "start"
+  if ! attach_ubi1; then
+    log "skip: cannot attach mtd${MTD_NUM}"
+    return 0
+  fi
+
+  if ensure_volume; then
+    log "OK: ubi1 volume ready"
+    return 0
+  fi
+
+  log "WARN: failed to create volume $VOL_NAME"
+  return 0
+}

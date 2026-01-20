@@ -8,7 +8,7 @@ set -eu
 # Core (meta/mihomo)
 URL_CORE_TGZ="https://bryan-pub26.oss-cn-shenzhen.aliyuncs.com/hx/vps/clash-linux-arm64.tar.gz"
 
-# GEO (runtime in tmpfs only)
+# GEO (persistent on overlay/extroot)
 URL_GEOIP="https://bryan-pub26.oss-cn-shenzhen.aliyuncs.com/hx/vps/geoip.dat"
 URL_GEOSITE="https://bryan-pub26.oss-cn-shenzhen.aliyuncs.com/hx/vps/geosite.dat"
 URL_MMDB="https://bryan-pub26.oss-cn-shenzhen.aliyuncs.com/hx/vps/Country.mmdb"
@@ -37,8 +37,9 @@ CUSTOM_STATE_DIR="${CUSTOM_OC_DIR}/state"
 MARK="${CUSTOM_STATE_DIR}/hx-openclash-init.done"
 
 TMP_OC_DIR="/tmp/openclash"
-TMP_GEO_DIR="${TMP_OC_DIR}/geo"
 TMP_CACHE_DIR="${TMP_OC_DIR}/cache"
+
+GEO_DIR="/overlay/hx/openclash/geo"
 
 # =========================
 # Helpers
@@ -91,7 +92,7 @@ fetch() {
 }
 
 ensure_dirs() {
-  mkdir -p "$OC_DIR" "$TMP_GEO_DIR" "$TMP_CACHE_DIR" "$CUSTOM_STATE_DIR" >/dev/null 2>&1 || true
+  mkdir -p "$OC_DIR" "$TMP_CACHE_DIR" "$CUSTOM_STATE_DIR" "$GEO_DIR" >/dev/null 2>&1 || true
 }
 
 net_ready() {
@@ -107,10 +108,11 @@ net_ready() {
 }
 
 seed_links() {
-  # GEO -> tmpfs
-  ln -sf "$TMP_GEO_DIR/GeoIP.dat"    "$OC_DIR/GeoIP.dat"
-  ln -sf "$TMP_GEO_DIR/GeoSite.dat"  "$OC_DIR/GeoSite.dat"
-  ln -sf "$TMP_GEO_DIR/Country.mmdb" "$OC_DIR/Country.mmdb"
+  # GEO -> persistent
+  mkdir -p "$GEO_DIR" >/dev/null 2>&1 || true
+  ln -sf "$GEO_DIR/GeoIP.dat"    "$OC_DIR/GeoIP.dat"
+  ln -sf "$GEO_DIR/GeoSite.dat"  "$OC_DIR/GeoSite.dat"
+  ln -sf "$GEO_DIR/Country.mmdb" "$OC_DIR/Country.mmdb"
 
   # cache -> tmpfs
   if [ -e "$OC_DIR/cache" ] && [ ! -L "$OC_DIR/cache" ]; then
@@ -148,13 +150,13 @@ install_core() {
 }
 
 download_geo() {
-  log "downloading geo to tmpfs"
+  log "ensure geo (persistent)"
 
-  # If any fails, we still proceed (OpenClash may download later),
-  # but we log failures clearly.
-  fetch "$URL_GEOIP"   "$TMP_GEO_DIR/GeoIP.dat"    || log "WARN: GeoIP download failed"
-  fetch "$URL_GEOSITE" "$TMP_GEO_DIR/GeoSite.dat"  || log "WARN: GeoSite download failed"
-  fetch "$URL_MMDB"    "$TMP_GEO_DIR/Country.mmdb" || log "WARN: mmdb download failed"
+  mkdir -p "$GEO_DIR" >/dev/null 2>&1 || true
+
+  [ -s "$GEO_DIR/GeoIP.dat" ]    || fetch "$URL_GEOIP"   "$GEO_DIR/GeoIP.dat"    || log "WARN: GeoIP download failed"
+  [ -s "$GEO_DIR/GeoSite.dat" ]  || fetch "$URL_GEOSITE" "$GEO_DIR/GeoSite.dat"  || log "WARN: GeoSite download failed"
+  [ -s "$GEO_DIR/Country.mmdb" ] || fetch "$URL_MMDB"    "$GEO_DIR/Country.mmdb" || log "WARN: mmdb download failed"
 
   return 0
 }

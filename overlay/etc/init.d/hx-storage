@@ -13,6 +13,9 @@ MNT="/mnt/custom"
 OC_ETC="/etc/openclash"
 OC_TMP="/tmp/openclash"
 
+# Persist GEO on overlay (with built-in extroot this is ubi1, ~40M)
+GEO_DIR="/overlay/hx/openclash/geo"
+
 log() { logger -t hx-storage "$*"; echo "[hx-storage] $*"; }
 
 # BusyBox-safe mount check
@@ -21,7 +24,8 @@ is_mounted() { grep -qs " ${1} " /proc/mounts; }
 ensure_dirs() {
   mkdir -p "${MNT}" \
            "${OC_ETC}" \
-           "${OC_TMP}/geo" "${OC_TMP}/cache" "${OC_TMP}/log" \
+           "${OC_TMP}/cache" "${OC_TMP}/log" \
+           "${GEO_DIR}" \
            "${MNT}/openclash/core" "${MNT}/openclash/state" >/dev/null 2>&1 || true
 }
 
@@ -62,10 +66,11 @@ link_openclash_paths() {
   fi
   ln -snf "${MNT}/openclash/core" "${OC_ETC}/core"
 
-  # GEO -> tmpfs
-  ln -sf "${OC_TMP}/geo/GeoIP.dat"    "${OC_ETC}/GeoIP.dat"
-  ln -sf "${OC_TMP}/geo/GeoSite.dat"  "${OC_ETC}/GeoSite.dat"
-  ln -sf "${OC_TMP}/geo/Country.mmdb" "${OC_ETC}/Country.mmdb"
+  # GEO -> persistent
+  mkdir -p "${GEO_DIR}" >/dev/null 2>&1 || true
+  ln -sf "${GEO_DIR}/GeoIP.dat"    "${OC_ETC}/GeoIP.dat"
+  ln -sf "${GEO_DIR}/GeoSite.dat"  "${OC_ETC}/GeoSite.dat"
+  ln -sf "${GEO_DIR}/Country.mmdb" "${OC_ETC}/Country.mmdb"
 
   # cache -> tmpfs
   if [ -e "${OC_ETC}/cache" ] && [ ! -L "${OC_ETC}/cache" ]; then
@@ -93,7 +98,7 @@ start() {
   ensure_dirs
   link_openclash_paths
 
-  log "OK: custom mounted at ${MNT}; openclash core->custom; geo/cache->tmpfs"
+  log "OK: custom mounted at ${MNT}; openclash core->custom; geo->persistent; cache->tmpfs"
   return 0
 }
 

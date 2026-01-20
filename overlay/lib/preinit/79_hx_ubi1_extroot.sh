@@ -3,46 +3,56 @@
 . /lib/functions.sh
 . /lib/functions/preinit.sh
 
-hx_ubi1_attach() {
-	# prove the hook runs
-	echo "hx: preinit_essential: hx_ubi1_attach enter" > /dev/kmsg
+hx_ubi1_extroot() {
+        echo "hx: preinit extroot begin" > /dev/kmsg
 
-	# already attached
-	[ -c /dev/ubi1 ] && {
-		echo "hx: ubi1 already present (/dev/ubi1), skip attach" > /dev/kmsg
-		return 0
-	}
+        # 如果 /overlay 已经挂载，直接跳过
+        if mount | grep -qE ' on /overlay '; then
+                echo "hx: /overlay already mounted, skip" > /dev/kmsg
+                return 0
+        fi
 
-	# no mtd partition, nothing to do
-	grep -qs '"ubi1"' /proc/mtd || {
-		echo "hx: mtd5 ubi1 not found in /proc/mtd, skip" > /dev/kmsg
-		return 0
-	}
+        # 1) attach ubi1 (mtd5)
+        grep -qs '"ubi1"' /proc/mtd || {
+                echo "hx: no mtd ubi1, skip" > /dev/kmsg
+                return 0
+        }
 
-	# try detach first (ignore errors)
-	ubidetach -m 5 >/dev/null 2>&1 || true
+        ubidetach -m 5 >/dev/null 2>&1 || true
 
-	# attach explicitly to ubi device 1 first, fallback generic attach
-	if ubiattach -m 5 -d 1 >/dev/null 2>&1; then
-		echo "hx: ubiattach mtd5 -> ubi1 OK (-d 1)" > /dev/kmsg
-	else
-		ubiattach -m 5 >/dev/null 2>&1 || true
-		echo "hx: ubiattach mtd5 generic attempted" > /dev/kmsg
-	fi
+        if ubiattach -m 5 -d 1 >/dev/null 2>&1; then
+                echo "hx: ubiattach mtd5 -> ubi1 OK (-d 1)" > /dev/kmsg
+        else
+                ubiattach -m 5 >/dev/null 2>&1 || true
+                echo "hx: ubiattach mtd5 fallback done" > /dev/kmsg
+        fi
 
-	# wait for ubi volume node (race-proof)
-	echo "hx: ubi1 preinit attach done, waiting /dev/ubi1_0" > /dev/kmsg
-	i=0
-	while [ $i -lt 50 ]; do
-		[ -c /dev/ubi1_0 ] && {
-			echo "hx: /dev/ubi1_0 ready" > /dev/kmsg
-			break
-		}
-		i=$((i+1))
-		sleep 0.1
-	done
+        # 2) 等待 volume 节点
+        i=0
+        while [ $i -lt 80 ]; do
+                [ -c /dev/ubi1_0 ] && break
+                i=$((i+1))
+                sleep 0.1
+        done
 
-	return 0
+        [ -c /dev/ubi1_0 ] || {
+                echo "hx: /dev/ubi1_0 not ready, abort" > /dev/kmsg
+                return 0
+        }
+
+        echo "hx: /dev/ubi1_0 ready, mounting to /overlay" > /dev/kmsg
+
+        # 3) 挂载 UBIFS 到 /overlay
+        mkdir -p /overlay
+        mount -t ubifs /dev/ubi1_0 /overlay || {
+                echo "hx: mount /dev/ubi1_0 -> /overlay failed" > /dev/kmsg
+                return 0
+        }
+
+        # ★ 关键：准备 overlayfs 必要目录（防止 mount_root 覆盖）
+        mkdir -p /overlay/upper /overlay/work
+
+        echo "hx: extroot overlay mounted from ubi1_0" > /dev/kmsg
 }
 
-boot_hook_add preinit_essential hx_ubi1_attach
+boot_hook_add preinit_essential hx_ubi1_extroot

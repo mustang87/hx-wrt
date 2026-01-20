@@ -11,7 +11,7 @@ HXWRT_MODEL_SHORT="${HXWRT_MODEL_SHORT:-WR3000K}"
 
 # Release branding (written into overlay)
 HXWRT_DIST="${HXWRT_DIST:-HX-WRT}"
-HXWRT_RELEASE="${HXWRT_RELEASE:-25.12.0}"          # user-facing version (hide SNAPSHOT)
+HXWRT_RELEASE="${HXWRT_RELEASE:-main}"          # user-facing version (hide SNAPSHOT)
 HXWRT_TARGET="${HXWRT_TARGET:-mediatek/filogic}"
 HXWRT_ARCH="${HXWRT_ARCH:-aarch64_cortex-a53}"
 

@@ -17,38 +17,31 @@ hx_ubi1_extroot() {
 		return 0
 	}
 
+	# 1) attach ubi1 (mtd5 -> ubi1)
 	ubidetach -m 5 >/dev/null 2>&1 || true
 	ubiattach -m 5 -d 1 >/dev/null 2>&1 || {
 		echo "hx: ubiattach mtd5 failed" > /dev/kmsg
 		return 0
 	}
 
-	echo "hx: waiting /dev/ubi1_0 (sleep=1s, max=30s) ..." > /dev/kmsg
-	i=0
-	while [ $i -lt 30 ]; do
-		[ -c /dev/ubi1_0 ] && break
-		i=$((i+1))
-		sleep 1
-	done
+	# 2) Ensure device nodes exist (preinit has no hotplug/mdev yet)
+	# In your system they show as: /dev/ubi1 = c 249,0 ; /dev/ubi1_0 = c 249,1
+	[ -c /dev/ubi1 ] || mknod -m 600 /dev/ubi1 c 249 0
+	[ -c /dev/ubi1_0 ] || mknod -m 600 /dev/ubi1_0 c 249 1
 
-	[ -c /dev/ubi1_0 ] || {
-		echo "hx: /dev/ubi1_0 still not ready (timeout 30s)" > /dev/kmsg
-		return 0
-	}
-
-	echo "hx: /dev/ubi1_0 ready, mount ubifs upper" > /dev/kmsg
-
+	# 3) mount UBIFS (upper storage)
 	mkdir -p /tmp/hx-overlay
 	mount -t ubifs /dev/ubi1_0 /tmp/hx-overlay || {
-		echo "hx: mount ubi1_0 -> /tmp/hx-overlay failed" > /dev/kmsg
+		echo "hx: mount ubifs /dev/ubi1_0 -> /tmp/hx-overlay failed" > /dev/kmsg
 		return 0
 	}
-
 	mkdir -p /tmp/hx-overlay/upper /tmp/hx-overlay/work
 
+	# 4) mount overlayfs to /
 	mount -t overlay overlayfs:/overlay \
 		-o lowerdir=/,upperdir=/tmp/hx-overlay/upper,workdir=/tmp/hx-overlay/work / || {
 		echo "hx: overlayfs mount to / failed" > /dev/kmsg
+		umount /tmp/hx-overlay >/dev/null 2>&1 || true
 		return 0
 	}
 

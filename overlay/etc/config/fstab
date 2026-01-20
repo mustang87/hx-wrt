@@ -9,7 +9,7 @@ config global 'automount'
 # HX-WRT: built-in extroot overlay on the 2nd UBI partition (mtd5: "ubi1")
 config mount 'extroot_overlay'
 	option target '/overlay'
-	option device 'ubi1:extroot_overlay'
+	option device '/dev/ubi1_0'
 	option fstype 'ubifs'
 	option options 'rw,noatime'
 	option enabled '1'

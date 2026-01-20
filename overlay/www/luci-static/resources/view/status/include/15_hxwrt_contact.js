@@ -146,8 +146,8 @@ return baseclass.extend({
 				row('邮箱',     emailNode),
 				row('Telegram', tgNode),
 				row('QQ',       qqNode),
-				row('QQ群',     qqGroupNode),
-				row('微信',     textNode(CONTACT.wechat))
+				row('QQ群',     qqGroupNode)
+				// row('微信',     textNode(CONTACT.wechat))
 			]),
 
 			// E('div', { 'style': 'margin-top:10px;' }, [

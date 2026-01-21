@@ -1,7 +1,8 @@
 #!/bin/sh
 set -e
 
-exec >/tmp/.hxwrt/uci-defaults/92-dhcp.log 2>&1
+. /usr/lib/hxwrt/log.sh
+hx_log_redirect "uci-defaults" "92-dhcp.log"
 
 # Set DHCP for LAN (地址池 + 启用)
 uci set dhcp.lan.start='100'

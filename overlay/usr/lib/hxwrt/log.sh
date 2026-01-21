@@ -122,3 +122,32 @@ hx_log_rotate() {
   mv -f "$f" "${f}.1" 2>/dev/null || true
   : > "$f" 2>/dev/null || true
 }
+
+hx_log_path() {
+  # hx_log_path <category> <file>
+  local category="$1"
+  local file="$2"
+
+  case "$category" in
+    uci-defaults)
+      echo "/tmp/.hxwrt/uci-defaults/${file:-uci-defaults.log}"
+      ;;
+    uci-theme)
+      echo "/tmp/.hxwrt/hx-uci-15-theme.log"
+      ;;
+    openclash)
+      echo "/tmp/.hxwrt/openclash/hx-openclash-init-run.log"
+      ;;
+    *)
+      echo "${HX_LOG_TMP_DIR}/${file:-misc.log}"
+      ;;
+  esac
+}
+
+hx_log_redirect() {
+  # hx_log_redirect <category> <file>
+  local path
+  path="$(hx_log_path "$1" "$2")"
+  hx__ensure_dir "${path%/*}"
+  exec > "$path" 2>&1
+}

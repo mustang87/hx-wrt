@@ -1,7 +1,8 @@
 #!/bin/sh
 set -e
 
-exec >/tmp/.hxwrt/uci-defaults/99-hx-finish.log 2>&1
+. /usr/lib/hxwrt/log.sh
+hx_log_redirect "uci-defaults" "99-hx-finish.log"
 
 # Apply network/dhcp changes
 /etc/init.d/network restart || true

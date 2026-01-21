@@ -1,7 +1,8 @@
 #!/bin/sh
 set -e
 
-exec >/tmp/hx-uci-15-theme.log 2>&1
+. /usr/lib/hxwrt/log.sh
+hx_log_redirect "uci-theme"
 
 uci set luci.main.mediaurlbase='/luci-static/argon'
 uci commit luci

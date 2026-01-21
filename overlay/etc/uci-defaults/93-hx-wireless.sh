@@ -4,7 +4,8 @@ set -e
 wlan_name="HX-WRT"
 wlan_password="9876543210"
 
-exec >/tmp/.hxwrt/uci-defaults/93-wireless.log 2>&1
+. /usr/lib/hxwrt/log.sh
+hx_log_redirect "uci-defaults" "93-wireless.log"
 
 # 保护：密码不足 8 位就不配 wifi
 if [ -z "$wlan_name" ] || [ -z "$wlan_password" ] || [ ${#wlan_password} -lt 8 ]; then

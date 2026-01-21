@@ -1,7 +1,8 @@
 #!/bin/sh
 set -e
 
-exec >/tmp/.hxwrt/uci-defaults/95-apk-mirror.log 2>&1
+. /usr/lib/hxwrt/log.sh
+hx_log_redirect "uci-defaults" "95-apk-mirror.log"
 
 LIST="/etc/apk/repositories.d/distfeeds.list"
 USTC_BASE="https://mirrors.ustc.edu.cn/openwrt"

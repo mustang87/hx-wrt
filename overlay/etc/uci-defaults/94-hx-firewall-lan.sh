@@ -7,9 +7,9 @@
 
 set -eu
 
-HX_DIR="/tmp/.hxwrt/uci-defaults"
-LOG="${HX_DIR}/94-firewall.log"
-mkdir -p "${HX_DIR}"
+. /usr/lib/hxwrt/log.sh
+LOG="$(hx_log_path "uci-defaults" "94-firewall.log")"
+hx_log_redirect "uci-defaults" "94-firewall.log"
 
 log() { echo "[$(date '+%F %T')] $*" >> "${LOG}"; }
 

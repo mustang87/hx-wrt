@@ -24,7 +24,9 @@ FETCH_SLEEP="2"
 # =========================
 # Paths / Constants
 # =========================
-LOG="/tmp/hx-openclash-init-run.log"
+. /usr/lib/hxwrt/log.sh
+LOG="$(hx_log_path "openclash")"
+hx_log_redirect "openclash"
 TAG="hx-openclash-init"
 
 OC_DIR="/etc/openclash"

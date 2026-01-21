@@ -6,7 +6,8 @@ wlan_password="9876543210"
 root_password="admin"
 lan_ip_address="192.168.18.1"
 
-exec >/tmp/.hxwrt/uci-defaults/90-brand.log 2>&1
+. /usr/lib/hxwrt/log.sh
+hx_log_redirect "uci-defaults" "90-brand.log"
 
 # hostname / timezone
 uci set system.@system[0].hostname='HX-WRT'

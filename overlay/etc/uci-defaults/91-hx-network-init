@@ -3,7 +3,8 @@ set -e
 
 lan_ip_address="192.168.18.1"
 
-exec >/tmp/.hxwrt/uci-defaults/91-network.log 2>&1
+. /usr/lib/hxwrt/log.sh
+hx_log_redirect "uci-defaults" "91-network.log"
 
 # Configure LAN (IP + netmask 必须设置！)
 if [ -n "$lan_ip_address" ]; then

@@ -56,11 +56,17 @@ patch_dts_model() {
 detect_openwrt_revision() {
   if [ -z "${HXWRT_REVISION}" ]; then
     if [ -d "${OPENWRT_DIR}/.git" ]; then
-      HXWRT_REVISION="r$(git -C "${OPENWRT_DIR}" rev-list --count HEAD 2>/dev/null || true)-$(git -C "${OPENWRT_DIR}" rev-parse --short HEAD 2>/dev/null || true)"
+      local cnt sha
+      cnt="$(git -C "${OPENWRT_DIR}" rev-list --count HEAD 2>/dev/null || true)"
+      sha="$(git -C "${OPENWRT_DIR}" rev-parse --short HEAD 2>/dev/null || true)"
+      if [ -n "${cnt}" ] && [ -n "${sha}" ]; then
+        HXWRT_REVISION="r${cnt}-${sha}"
+      fi
     fi
   fi
   HXWRT_REVISION="${HXWRT_REVISION:-unknown}"
 }
+
 
 write_overlay_release_files() {
   detect_openwrt_revision
@@ -129,23 +135,52 @@ patch_luci_master() {
   # 3.2 luci-base src/Makefile: generates /usr/share/ucode/luci/version.uc
   local luci_base_src_mk="${luci_root}/modules/luci-base/src/Makefile"
   if [ -f "${luci_base_src_mk}" ]; then
-    # Replace the generator expression so version.uc will contain fixed branch text
-    if grep -q "branch = '\$(LUCI_GITBRANCH)'" "${luci_base_src_mk}"; then
-      log "patch luci-base version.uc generator: \$(LUCI_GITBRANCH) -> ${HXWRT_LUCI_VARIANT}"
-      sed -i "s/branch = '\\\$(LUCI_GITBRANCH)'/branch = '${HXWRT_LUCI_VARIANT}'/g" "${luci_base_src_mk}"
+    # Replace any generator assignment that uses LUCI_GITBRANCH
+    if grep -q "LUCI_GITBRANCH" "${luci_base_src_mk}"; then
+      log "patch luci-base generator: LUCI_GITBRANCH -> ${HXWRT_LUCI_VARIANT}"
+      sed -i -E "s/^(.*branch[[:space:]]*=[[:space:]]*)['\"]?\\\$\\(LUCI_GITBRANCH\\)['\"]?(.*)$/\\1'${HXWRT_LUCI_VARIANT}'\\2/g" "${luci_base_src_mk}"
     fi
 
-    # Extra safety: if some branches hardcode 'LuCI Master' literal in generator line
+    # Extra safety: replace literal 'LuCI Master' if present
     if grep -q "LuCI Master" "${luci_base_src_mk}"; then
       log "patch luci-base literal: LuCI Master -> ${HXWRT_LUCI_VARIANT}"
       sed -i "s/LuCI Master/${HXWRT_LUCI_VARIANT}/g" "${luci_base_src_mk}"
     fi
-  else
-    log "skip luci-base patch: not found: ${luci_base_src_mk}"
   fi
 
   log "luci patch done"
 }
+
+hxwrt_write_build_id() {
+  # Generate build identifier:
+  #   YYYYMMDD-HHMM-gitshort
+  # and write into HXWRT overlay (becomes /rom/etc/hxwrt_build_id)
+  local overlay="${HXWRT_DIR}/overlay"
+  local ts gitshort bid
+
+  ts="$(date +%Y%m%d-%H%M 2>/dev/null || echo 00000000-0000)"
+
+  # Prefer hx-wrt repo git, fallback to OPENWRT repo git, then nogit
+  gitshort="$(git -C "${HXWRT_DIR}" rev-parse --short HEAD 2>/dev/null \
+    || git -C "${OPENWRT_DIR}" rev-parse --short HEAD 2>/dev/null \
+    || echo nogit)"
+
+  bid="${ts}-${gitshort}"
+
+  mkdir -p "${overlay}/etc" 2>/dev/null || true
+  printf '%s\n' "${bid}" > "${overlay}/etc/hxwrt_build_id"
+
+  mkdir -p "${overlay}/etc/hx-wrt" 2>/dev/null || true
+  {
+    echo "build_id=${bid}"
+    echo "build_time=${ts}"
+    echo "git_short=${gitshort}"
+  } > "${overlay}/etc/hx-wrt/build-info"
+
+  log "build_id written: ${bid}"
+}
+
+
 
 main() {
   log "start: model='${HXWRT_MODEL_SHORT}', dist='${HXWRT_DIST}', release='${HXWRT_RELEASE}', luci='${HXWRT_LUCI_VARIANT}'"
@@ -153,6 +188,7 @@ main() {
   patch_dts_model
   write_overlay_release_files
   patch_luci_master
+  hxwrt_write_build_id
 
   log "all done"
 }

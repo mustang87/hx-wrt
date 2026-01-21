@@ -1,0 +1,125 @@
+#!/bin/sh
+# HX-WRT system_reset: unified reset entry (soft/hard)
+# - soft: behave like firstboot semantics
+# - hard: create extroot erase flag and optionally reboot; preinit will wipe overlay runtime dirs
+#
+# Logs:
+#   /overlay/hx/log/reset.log (or /tmp/.hxwrt/boot.log before overlay ready)
+
+set -eu
+
+# logging
+if [ -f /usr/lib/hxwrt/log.sh ]; then
+  . /usr/lib/hxwrt/log.sh
+  hx_log_init "reset" "reset.log"
+  hx_log I "system_reset start: argv='$*'"
+else
+  hx_log() { :; }
+fi
+
+MODE="soft"
+ASSUME_Y=0
+DO_REBOOT=0
+
+usage() {
+  cat <<'EOF'
+Usage:
+  system_reset [--soft|--hard] [-y] [-r]
+
+Options:
+  --soft        Soft reset (default): attempt to reset system config (firstboot semantics)
+  --hard        Hard reset: mark extroot overlay for wipe on next boot (preinit), then optionally reboot
+  -y            Assume yes (no prompt)
+  -r            Reboot after triggering reset
+EOF
+}
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --soft) MODE="soft" ;;
+    --hard) MODE="hard" ;;
+    -y) ASSUME_Y=1 ;;
+    -r) DO_REBOOT=1 ;;
+    -h|--help) usage; exit 0 ;;
+    *)
+      echo "Unknown arg: $1" >&2
+      usage
+      exit 1
+      ;;
+  esac
+  shift
+done
+
+confirm() {
+  [ "$ASSUME_Y" -eq 1 ] && return 0
+  echo -n "Proceed with ${MODE} reset? [y/N] "
+  read -r ans
+  [ "${ans:-}" = "y" ] || [ "${ans:-}" = "Y" ]
+}
+
+is_overlay_ready() {
+  mount | grep -q 'overlayfs:/overlay'
+}
+
+hard_reset() {
+  is_overlay_ready || {
+    hx_log E "overlayfs not mounted; cannot mark hard reset."
+    echo "ERROR: overlayfs not mounted; cannot mark hard reset." >&2
+    exit 2
+  }
+
+  # UBIFS extroot overlay: create flag for preinit policy
+  if [ -w /overlay ]; then
+    touch /overlay/.extroot-erase
+    sync
+    hx_log I "hard reset flag created: /overlay/.extroot-erase"
+    hx_log_kmsg "hard reset flag created"
+  else
+    hx_log E "/overlay not writable"
+    echo "ERROR: /overlay not writable." >&2
+    exit 3
+  fi
+}
+
+soft_reset() {
+  hx_log I "soft reset requested"
+  if command -v firstboot >/dev/null 2>&1; then
+    hx_log I "invoke: firstboot -y"
+    firstboot -y || true
+  elif [ -x /sbin/factoryreset ]; then
+    hx_log I "invoke: /sbin/factoryreset -y"
+    /sbin/factoryreset -y || true
+  elif command -v jffs2reset >/dev/null 2>&1; then
+    hx_log I "invoke: jffs2reset -y"
+    jffs2reset -y || true
+  else
+    hx_log E "no reset tool found"
+    echo "ERROR: no reset tool found (firstboot/factoryreset/jffs2reset)." >&2
+    exit 4
+  fi
+  sync
+}
+
+if ! confirm; then
+  hx_log W "user aborted"
+  exit 0
+fi
+
+case "$MODE" in
+  hard) hard_reset ;;
+  soft) soft_reset ;;
+  *)
+    hx_log E "invalid mode=$MODE"
+    echo "BUG: invalid mode=$MODE" >&2
+    exit 9
+    ;;
+esac
+
+if [ "$DO_REBOOT" -eq 1 ]; then
+  hx_log I "rebooting..."
+  sync
+  reboot
+fi
+
+hx_log I "done (mode=$MODE reboot=$DO_REBOOT)"
+exit 0

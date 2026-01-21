@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-LOG="/tmp/hx-uci-97-openclash.log"
+LOG="/tmp/.hxwrt/uci-defaults/98-hx-openclash-core-init.log"
 TAG="hx-openclash-init"
 
 echo "[$(date -Is)] uci-defaults start" >> "$LOG"

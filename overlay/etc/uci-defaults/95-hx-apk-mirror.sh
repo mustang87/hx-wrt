@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-exec >/tmp/hx-uci-95-apk.log 2>&1
+exec >/tmp/.hxwrt/uci-defaults/95-apk-mirror.log 2>&1
 
 LIST="/etc/apk/repositories.d/distfeeds.list"
 USTC_BASE="https://mirrors.ustc.edu.cn/openwrt"

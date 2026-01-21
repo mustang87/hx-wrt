@@ -1,4 +1,7 @@
 #!/bin/sh
+set -e
+
+exec >/tmp/.hxwrt/uci-defaults/96-storage.log 2>&1
 
 # Ensure hx-storage is enabled (mount /mnt/custom and set OpenClash paths)
 /etc/init.d/hx-storage enable >/dev/null 2>&1 || true

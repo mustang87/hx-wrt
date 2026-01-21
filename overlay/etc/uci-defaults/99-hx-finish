@@ -16,7 +16,9 @@ wifi reload || wifi up || true
 /etc/init.d/firewall restart || /etc/init.d/firewall start || true
 # /etc/init.d/rpcd restart || true
 
-/etc/init.d/uhttpd restart || true
+# Ensure uhttpd is enabled and running
+/etc/init.d/uhttpd enable || true
+/etc/init.d/uhttpd restart || /etc/init.d/uhttpd start || true
 
 
 echo "[OK] finish done"

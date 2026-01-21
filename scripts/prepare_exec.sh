@@ -11,5 +11,8 @@ chmod +x "${ROOT_DIR}/scripts/openclash/"* 2>/dev/null || true
 
 chmod +x "${ROOT_DIR}/overlay/etc/uci-defaults/"* 2>/dev/null || true
 chmod +x "${ROOT_DIR}/overlay/etc/init.d/"* 2>/dev/null || true
+chmod +x "${ROOT_DIR}/overlay/etc/hotplug.d/"* 2>/dev/null || true
+chmod +x "${ROOT_DIR}/overlay/lib/preinit/"* 2>/dev/null || true
+chmod +x "${ROOT_DIR}/overlay/usr/lib/hxwrt/"*.sh 2>/dev/null || true
 
 echo "[PREP] chmod done"

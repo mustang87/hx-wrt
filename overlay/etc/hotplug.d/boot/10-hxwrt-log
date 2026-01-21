@@ -1,0 +1,5 @@
+#!/bin/sh
+. /usr/lib/hxwrt/log.sh
+
+hx_log_init "boot" "boot.log"
+hx_log I "boot hotplug event: ACTION=${ACTION:-unknown}"

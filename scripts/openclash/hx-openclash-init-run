@@ -198,23 +198,23 @@ fi
 ensure_dirs
 seed_links
 
-# 已完成就退出
-if [ -f "$MARK" ]; then
-  log "already done, exit"
-  exit 0
-fi
-
 # 网络未就绪则让 procd 下次重试
 if ! net_ready; then
   log "network not ready, retry next boot"
   exit 1
 fi
 
-# 1) core (persistent in custom)
+# Always ensure GEO files exist on every boot
+download_geo || true
+
+# Always ensure core exists on every boot
 install_core || die "core install failed"
 
-# 2) GEO (tmpfs only)
-download_geo || true
+# 已完成就退出（mark only)
+if [ -f "$MARK" ]; then
+  log "already done, exit"
+  exit 0
+fi
 
 date > "$MARK"
 log "done, mark written: $MARK"

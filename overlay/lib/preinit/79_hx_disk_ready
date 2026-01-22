@@ -1,13 +1,19 @@
 #!/bin/sh
 # HX-WRT: prepare ubifs extroot on mtd5 ("ubi1") like X-WRT does.
+# - Ensure ubi1 exists and volume extroot_overlay exists
+# - Configure fstab overlay mount to /overlay (ubifs)
+# - BEFORE overlayfs mounts as / :
+#     * if /mnt/.extroot-erase exists -> wipe runtime dirs
+#     * if build_id changed -> wipe runtime dirs + record build_id
+#
+# IMPORTANT:
+#   All destructive operations happen while the ubifs volume is mounted at /mnt,
+#   i.e. BEFORE overlayfs becomes "/". This avoids the "need reboot twice" symptom.
 
 . /lib/functions.sh
 . /lib/functions/preinit.sh
 . /usr/lib/hxwrt/log.sh
 
-# preinit stage logs:
-# - before extroot: /tmp/.hxwrt/boot.log
-# - after extroot (promoted by init script): /overlay/hxwrt/.log/boot.log
 HX_LOG_COMPONENT="preinit"
 hx_log_init "preinit" "preinit.log"
 
@@ -24,13 +30,66 @@ hx_mknod_from_sysfs() {
 	return 0
 }
 
+hx__wipe_policy_on_raw_ubifs() {
+	# Args: <voldev> (e.g. /dev/ubi1_0)
+	local voldev="$1"
+	local rom_id ovl_id wiped
+
+	wiped=0
+	mkdir -p /mnt 2>/dev/null || true
+
+	# Mount raw UBIFS volume to /mnt (NOT /overlay, NOT overlayfs root)
+	if ! mount -t ubifs "$voldev" /mnt >/dev/null 2>&1; then
+		hx_log W "disk_ready: mount raw ubifs to /mnt failed, skip wipe policy"
+		return 0
+	fi
+
+	# 1) Hard/soft reset flag
+	if [ -e /mnt/.extroot-erase ]; then
+		hx_log W "disk_ready: found /mnt/.extroot-erase -> will wipe runtime dirs"
+		wiped=1
+	fi
+
+	# 2) Default clean upgrade via build_id
+	rom_id="$(tr -d '\r\n' </rom/etc/hxwrt_build_id 2>/dev/null || true)"
+	ovl_id="$(tr -d '\r\n' </mnt/.hxwrt/build_id 2>/dev/null || true)"
+
+	if [ -n "$rom_id" ]; then
+		if [ -z "$ovl_id" ] || [ "$rom_id" != "$ovl_id" ]; then
+			hx_log W "disk_ready: build_id changed (rom='$rom_id' ovl='$ovl_id') -> will wipe runtime dirs"
+			wiped=1
+		fi
+	else
+		hx_log W "disk_ready: ROM build_id empty -> skip auto wipe"
+	fi
+
+	if [ "$wiped" -eq 1 ]; then
+		hx_log W "disk_ready: wiping /mnt/{upper,work,etc,.fs_state,.hxwrt} ..."
+		rm -rf /mnt/upper /mnt/work /mnt/etc /mnt/.fs_state /mnt/.hxwrt 2>/dev/null || true
+		rm -f  /mnt/.extroot-erase 2>/dev/null || true
+
+		# Create stable base dirs for mount_root to avoid first-boot half-broken state
+		mkdir -p /mnt/upper /mnt/work /mnt/etc 2>/dev/null || true
+
+		# Record build id if present
+		if [ -n "$rom_id" ]; then
+			mkdir -p /mnt/.hxwrt 2>/dev/null || true
+			printf '%s\n' "$rom_id" > /mnt/.hxwrt/build_id 2>/dev/null || true
+		fi
+
+		sync
+		hx_log W "disk_ready: wipe done"
+	fi
+
+	umount /mnt >/dev/null 2>&1 || hx_log E "disk_ready: umount /mnt failed (busy?)"
+	return 0
+}
+
 hx_ubifs_extroot_prepare_wr3000k() {
 	# only run if mtd5 exists and named "ubi1"
 	grep -qs '"ubi1"' /proc/mtd || return 0
 
 	hx_log I "disk_ready: tenbay wr3000k ubifs extroot prepare begin"
-	# 可选：关键节点写 kmsg，方便 dmesg 快速看
-	# hx_log_kmsg "disk_ready begin"
 
 	# find mtd index for "ubi1" (should be 5)
 	local mtdnum
@@ -40,7 +99,7 @@ hx_ubifs_extroot_prepare_wr3000k() {
 		return 0
 	}
 
-	# attach mtd to ubi with max-beb-per1024=2 (match reserved PEB behavior)
+	# attach mtd to ubi with max-beb-per1024=2
 	if ! ubiattach -p "/dev/mtd${mtdnum}" --max-beb-per1024=2 >/dev/null 2>&1; then
 		hx_log W "disk_ready: ubiattach failed, try ubiformat then attach"
 
@@ -71,7 +130,6 @@ hx_ubifs_extroot_prepare_wr3000k() {
 	if ! ubinfo /dev/ubi1 -N extroot_overlay >/dev/null 2>&1; then
 		hx_log W "disk_ready: extroot_overlay missing, recreate volume (format ubi1)"
 
-		# safest: detach + format + attach to get clean slate
 		ubidetach -p "/dev/mtd${mtdnum}" >/dev/null 2>&1 || true
 		ubiformat "/dev/mtd${mtdnum}" -y >/dev/null 2>&1 || true
 		ubiattach -p "/dev/mtd${mtdnum}" --max-beb-per1024=2 >/dev/null 2>&1 || {
@@ -79,7 +137,6 @@ hx_ubifs_extroot_prepare_wr3000k() {
 			return 0
 		}
 
-		# wait again
 		for i in 1 2 3 4 5 6 7 8 9 10; do
 			[ -d /sys/class/ubi/ubi1 ] && break
 			sleep 1
@@ -91,15 +148,13 @@ hx_ubifs_extroot_prepare_wr3000k() {
 
 		hx_mknod_from_sysfs /sys/class/ubi/ubi1/dev /dev/ubi1 0600 || true
 
-		# create max sized volume
 		ubimkvol /dev/ubi1 -m -N extroot_overlay >/dev/null 2>&1 || {
 			hx_log E "disk_ready: ubimkvol extroot_overlay failed"
 			return 0
 		}
 	fi
 
-	# find volume id by name via sysfs (avoid depending on /dev node timing)
-	# expected: /sys/class/ubi/ubi1_0/name == "extroot_overlay"
+	# find volume id by name via sysfs
 	local volpath=""
 	for p in /sys/class/ubi/ubi1_*; do
 		[ -e "$p/name" ] || continue
@@ -119,59 +174,10 @@ hx_ubifs_extroot_prepare_wr3000k() {
 		return 0
 	}
 
-	# --- BEGIN: safe wipe policy (before overlayfs mount) ---
-	mkdir -p /mnt 2>/dev/null || true
+	# --- SAFE WIPE POLICY (must be before overlayfs mount_root) ---
+	hx__wipe_policy_on_raw_ubifs "$voldev"
 
-	if mount -t ubifs "$voldev" /mnt >/dev/null 2>&1; then
-		local rom_id ovl_id need_wipe
-		need_wipe=0
-
-		# hard reset flag
-		if [ -e /mnt/.extroot-erase ]; then
-			hx_log W "disk_ready: found /mnt/.extroot-erase -> request wipe"
-			need_wipe=1
-		fi
-
-		# build_id clean upgrade (default clean upgrade)
-		rom_id="$(tr -d '\r\n' </rom/etc/hxwrt_build_id 2>/dev/null || true)"
-		ovl_id="$(tr -d '\r\n' </mnt/.hxwrt/build_id 2>/dev/null || true)"
-
-		if [ -n "$rom_id" ]; then
-			if [ -z "$ovl_id" ]; then
-				hx_log W "disk_ready: no ovl build_id -> first boot -> request wipe"
-				need_wipe=1
-			elif [ "$rom_id" != "$ovl_id" ]; then
-				hx_log W "disk_ready: build_id changed (rom='$rom_id' ovl='$ovl_id') -> request wipe"
-				need_wipe=1
-			fi
-		else
-			hx_log W "disk_ready: ROM build_id empty -> skip auto wipe"
-		fi
-
-		if [ "$need_wipe" -eq 1 ]; then
-			hx_log W "disk_ready: wiping runtime dirs under extroot volume"
-			rm -rf /mnt/upper /mnt/work /mnt/etc /mnt/.fs_state /mnt/.hxwrt 2>/dev/null || true
-			rm -f  /mnt/.extroot-erase 2>/dev/null || true
-			sync
-		fi
-
-		# always record build_id (no wipe) when rom_id is available
-		if [ -n "$rom_id" ]; then
-			mkdir -p /mnt/.hxwrt 2>/dev/null || true
-			printf '%s\n' "$rom_id" > /mnt/.hxwrt/build_id 2>/dev/null || true
-			sync
-			hx_log I "disk_ready: recorded build_id to /mnt/.hxwrt/build_id: $rom_id"
-		fi
-
-		umount /mnt >/dev/null 2>&1 || true
-	else
-		hx_log W "disk_ready: cannot mount $voldev to /mnt for wipe policy (skip)"
-	fi
-	# --- END: safe wipe policy ---
-
-
-
-	# write fstab overlay entry (device uses /dev path, NOT ubi1:volname)
+	# write fstab overlay entry
 	uci -q delete fstab.overlay.uuid
 	uci set fstab.overlay='mount'
 	uci set fstab.overlay.target='/overlay'
@@ -183,8 +189,6 @@ hx_ubifs_extroot_prepare_wr3000k() {
 	uci commit fstab
 
 	hx_log I "disk_ready: extroot configured: device=$voldev"
-	# hx_log_kmsg "disk_ready extroot configured: $voldev"
-
 	return 0
 }
 

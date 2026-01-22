@@ -1,9 +1,12 @@
 #!/bin/sh
 # HX-WRT: prepare ubifs extroot on mtd ("ubi1" partition name) like X-WRT does.
-# Key rules:
-# 1) All destructive ops happen on raw UBIFS mounted at /mnt (BEFORE overlayfs becomes "/").
-# 2) Persist fstab.overlay into /mnt/etc/config (extroot), not current /etc.
-# 3) Do NOT ubiformat unless extroot_overlay is missing and cannot be created.
+# Final rules:
+# 1) All destructive operations happen on RAW UBIFS mounted at /mnt (BEFORE overlayfs becomes "/").
+# 2) Ensure extroot_overlay volume exists on the UBI device attached from the "ubi1" MTD partition.
+# 3) Write fstab.overlay TWICE:
+#    - CURRENT /etc/config/fstab (so this boot will mount extroot as /overlay)
+#    - PERSISTENT /mnt/etc/config/fstab (so next boots remain correct)
+# 4) Do NOT ubiformat automatically; only create missing volume if possible.
 
 . /lib/functions.sh
 . /lib/functions/preinit.sh
@@ -12,6 +15,7 @@
 HX_LOG_COMPONENT="preinit"
 hx_log_init "preinit" "preinit.log"
 
+# create char node by sysfs dev file, e.g. /sys/class/ubi/ubiX/dev -> "249:1"
 hx_mknod_from_sysfs() {
 	local sys="$1" path="$2" mode="$3"
 	[ -e "$sys" ] || return 1
@@ -24,8 +28,8 @@ hx_mknod_from_sysfs() {
 	return 0
 }
 
+# map mtdnum -> ubi index (ubiX where /sys/class/ubi/ubiX/mtd_num == mtdnum)
 hx_find_ubi_by_mtdnum() {
-	# echo ubi index, e.g. "1" for /sys/class/ubi/ubi1
 	local mtdnum="$1" u
 	for u in /sys/class/ubi/ubi*; do
 		[ -d "$u" ] || continue
@@ -47,12 +51,49 @@ hx_umount_mnt() {
 	umount /mnt >/dev/null 2>&1 || true
 }
 
+# set CURRENT fstab.overlay (so mount_root can use it in this boot)
+hx_set_fstab_current() {
+	local dev="$1"
+
+	uci -q delete fstab.overlay.uuid
+	uci set fstab.overlay='mount'
+	uci set fstab.overlay.target='/overlay'
+	uci set fstab.overlay.device="$dev"
+	uci set fstab.overlay.fstype='ubifs'
+	uci set fstab.overlay.options='rw,noatime'
+	uci set fstab.overlay.enabled='1'
+	uci set fstab.overlay.is_rootfs='1'
+	uci commit fstab
+	sync
+
+	hx_log I "disk_ready: set CURRENT fstab.overlay device=$dev"
+}
+
+# persist fstab.overlay into extroot (/mnt/etc/config)
+hx_persist_fstab_to_mnt() {
+	local dev="$1"
+	mkdir -p /mnt/etc/config 2>/dev/null || true
+
+	uci -c /mnt/etc/config -q delete fstab.overlay.uuid
+	uci -c /mnt/etc/config set fstab.overlay='mount'
+	uci -c /mnt/etc/config set fstab.overlay.target='/overlay'
+	uci -c /mnt/etc/config set fstab.overlay.device="$dev"
+	uci -c /mnt/etc/config set fstab.overlay.fstype='ubifs'
+	uci -c /mnt/etc/config set fstab.overlay.options='rw,noatime'
+	uci -c /mnt/etc/config set fstab.overlay.enabled='1'
+	uci -c /mnt/etc/config set fstab.overlay.is_rootfs='1'
+	uci -c /mnt/etc/config commit fstab
+	sync
+
+	hx_log I "disk_ready: persisted fstab.overlay into extroot (/mnt/etc/config) device=$dev"
+}
+
+# wipe policy executed ONLY when /mnt is raw ubifs extroot
 hx_wipe_policy_on_mnt() {
-	# /mnt is mounted raw ubifs extroot
 	local rom_id ovl_id wiped
 	wiped=0
 
-	# flags
+	# reset flags
 	local hard=0 soft=0
 	[ -e /mnt/.extroot-erase-hard ] && hard=1
 	[ -e /mnt/.extroot-erase-soft ] && soft=1
@@ -90,9 +131,11 @@ hx_wipe_policy_on_mnt() {
 
 	rm -f /mnt/.extroot-erase-hard /mnt/.extroot-erase-soft 2>/dev/null || true
 
+	# recreate required dirs
 	mkdir -p /mnt/upper /mnt/work 2>/dev/null || true
 	[ "$wiped" -eq 2 ] && mkdir -p /mnt/etc 2>/dev/null || true
 
+	# record build id
 	if [ -n "$rom_id" ]; then
 		mkdir -p /mnt/.hxwrt 2>/dev/null || true
 		printf '%s\n' "$rom_id" > /mnt/.hxwrt/build_id 2>/dev/null || true
@@ -103,35 +146,18 @@ hx_wipe_policy_on_mnt() {
 	return 0
 }
 
-hx_persist_fstab_to_mnt() {
-	# IMPORTANT: write to /mnt/etc/config (extroot persistent), not current /etc
-	mkdir -p /mnt/etc/config 2>/dev/null || true
-
-	uci -c /mnt/etc/config -q delete fstab.overlay.uuid
-	uci -c /mnt/etc/config set fstab.overlay='mount'
-	uci -c /mnt/etc/config set fstab.overlay.target='/overlay'
-	uci -c /mnt/etc/config set fstab.overlay.device="$1"
-	uci -c /mnt/etc/config set fstab.overlay.fstype='ubifs'
-	uci -c /mnt/etc/config set fstab.overlay.options='rw,noatime'
-	uci -c /mnt/etc/config set fstab.overlay.enabled='1'
-	uci -c /mnt/etc/config set fstab.overlay.is_rootfs='1'
-	uci -c /mnt/etc/config commit fstab
-	sync
-
-	hx_log I "disk_ready: persisted fstab.overlay into extroot (/mnt/etc/config)"
-}
-
 hx_ubifs_extroot_prepare_wr3000k() {
-	# find mtd index for partition named "ubi1"
+	# only run if MTD partition named "ubi1" exists
 	grep -qs '"ubi1"' /proc/mtd || return 0
 
+	# find mtd index for "ubi1"
 	local mtdnum
 	mtdnum="$(awk -F: '/"ubi1"/{gsub("mtd","",$1); print $1}' /proc/mtd | head -n1)"
 	[ -n "$mtdnum" ] || { hx_log E "disk_ready: cannot find mtd index for ubi1"; return 0; }
 
 	hx_log I "disk_ready: extroot prepare begin (mtd${mtdnum})"
 
-	# attach mtd -> ubi (do NOT force format here)
+	# attach mtd -> ubi (no forced format)
 	ubiattach -p "/dev/mtd${mtdnum}" --max-beb-per1024=2 >/dev/null 2>&1 || true
 
 	# map mtdnum -> ubiX (do NOT assume ubi1)
@@ -146,9 +172,10 @@ hx_ubifs_extroot_prepare_wr3000k() {
 	local ubisys="/sys/class/ubi/ubi${ubidx}"
 	local ubidev="/dev/ubi${ubidx}"
 
+	# ensure /dev/ubiX exists
 	hx_mknod_from_sysfs "${ubisys}/dev" "${ubidev}" 0600 || true
 
-	# ensure extroot_overlay volume exists; try create if missing
+	# ensure volume extroot_overlay exists; create if missing
 	if ! ubinfo "${ubidev}" -N extroot_overlay >/dev/null 2>&1; then
 		hx_log W "disk_ready: extroot_overlay missing -> try create volume"
 		if ! ubimkvol "${ubidev}" -m -N extroot_overlay >/dev/null 2>&1; then
@@ -157,9 +184,8 @@ hx_ubifs_extroot_prepare_wr3000k() {
 		fi
 	fi
 
-	# find volume sysfs path by name
-	local volpath=""
-	local p
+	# locate volume sysfs path by name
+	local volpath="" p
 	for p in "/sys/class/ubi/ubi${ubidx}_"*; do
 		[ -e "$p/name" ] || continue
 		[ "$(cat "$p/name" 2>/dev/null)" = "extroot_overlay" ] || continue
@@ -171,13 +197,18 @@ hx_ubifs_extroot_prepare_wr3000k() {
 	local voldev="/dev/$(basename "$volpath")"
 	hx_mknod_from_sysfs "$volpath/dev" "$voldev" 0600 || { hx_log E "disk_ready: cannot create node $voldev"; return 0; }
 
-	# mount raw ubifs once, do wipe policy, persist fstab, then umount
+	# mount raw ubifs once, do wipe policy, write fstab (current + persistent), then umount
 	if ! hx_mount_raw_ubifs "$voldev"; then
 		hx_log E "disk_ready: mount raw ubifs to /mnt failed (voldev=$voldev)"
 		return 0
 	fi
 
 	hx_wipe_policy_on_mnt
+
+	# Write fstab in two places:
+	# - current /etc/config (for this boot)
+	# - /mnt/etc/config (persistent on extroot)
+	hx_set_fstab_current "$voldev"
 	hx_persist_fstab_to_mnt "$voldev"
 
 	hx_umount_mnt

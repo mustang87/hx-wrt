@@ -1,7 +1,17 @@
 #!/bin/sh
 # HX-WRT system_reset: unified reset entry (soft/hard)
-# - soft: behave like firstboot semantics
-# - hard: create extroot erase flag and optionally reboot; preinit will wipe overlay runtime dirs
+#
+# IMPORTANT:
+# - HX-WRT uses extroot overlay on ubi1 (extroot_overlay).
+# - Soft reset MUST reset extroot overlay too, otherwise it is meaningless.
+#
+# Behavior:
+#   --soft : mark extroot overlay for wipe on next boot, then optionally reboot
+#   --hard : same (reserved for stronger semantics in future), then optionally reboot
+#
+# The actual wiping is done SAFELY by /lib/preinit/79_hx_disk_ready:
+#   it mounts raw ubifs volume to /mnt BEFORE overlayfs mount and removes:
+#   /mnt/upper /mnt/work /mnt/etc /mnt/.fs_state /mnt/.hxwrt
 #
 # Logs:
 #   /overlay/hx/log/reset.log (or /tmp/.hxwrt/boot.log before overlay ready)
@@ -15,6 +25,7 @@ if [ -f /usr/lib/hxwrt/log.sh ]; then
   hx_log I "system_reset start: argv='$*'"
 else
   hx_log() { :; }
+  hx_log_kmsg() { :; }
 fi
 
 MODE="soft"
@@ -27,8 +38,8 @@ Usage:
   system_reset [--soft|--hard] [-y] [-r]
 
 Options:
-  --soft        Soft reset (default): attempt to reset system config (firstboot semantics)
-  --hard        Hard reset: mark extroot overlay for wipe on next boot (preinit), then optionally reboot
+  --soft        Soft reset (default): reset to factory defaults (extroot overlay will be wiped on next boot)
+  --hard        Hard reset: same as soft for now (reserved for stronger wipe in future)
   -y            Assume yes (no prompt)
   -r            Reboot after triggering reset
 EOF
@@ -57,47 +68,33 @@ confirm() {
   [ "${ans:-}" = "y" ] || [ "${ans:-}" = "Y" ]
 }
 
-is_overlay_ready() {
-  mount | grep -q 'overlayfs:/overlay'
+is_overlay_mounted() {
+  # overlayfs is the runtime root; extroot ubifs is mounted at /overlay
+  mount | grep -qE ' on /overlay '
 }
 
-hard_reset() {
-  is_overlay_ready || {
-    hx_log E "overlayfs not mounted; cannot mark hard reset."
-    echo "ERROR: overlayfs not mounted; cannot mark hard reset." >&2
+mark_extroot_erase() {
+  is_overlay_mounted || {
+    hx_log E "overlay not mounted; cannot mark extroot erase"
+    echo "ERROR: /overlay not mounted; cannot mark extroot erase." >&2
     exit 2
   }
 
-  # UBIFS extroot overlay: create flag for preinit policy
-  if [ -w /overlay ]; then
-    touch /overlay/.extroot-erase
-    sync
-    hx_log I "hard reset flag created: /overlay/.extroot-erase"
-    hx_log_kmsg "hard reset flag created"
-  else
-    hx_log E "/overlay not writable"
-    echo "ERROR: /overlay not writable." >&2
-    exit 3
-  fi
+  touch /overlay/.extroot-erase
+  sync
+  hx_log W "marked extroot wipe flag: /overlay/.extroot-erase"
+  hx_log_kmsg "marked extroot wipe flag"
 }
 
-soft_reset() {
-  hx_log I "soft reset requested"
-  if command -v firstboot >/dev/null 2>&1; then
-    hx_log I "invoke: firstboot -y"
-    firstboot -y || true
-  elif [ -x /sbin/factoryreset ]; then
-    hx_log I "invoke: /sbin/factoryreset -y"
-    /sbin/factoryreset -y || true
-  elif command -v jffs2reset >/dev/null 2>&1; then
-    hx_log I "invoke: jffs2reset -y"
-    jffs2reset -y || true
-  else
-    hx_log E "no reset tool found"
-    echo "ERROR: no reset tool found (firstboot/factoryreset/jffs2reset)." >&2
-    exit 4
-  fi
-  sync
+do_soft() {
+  hx_log I "soft reset requested -> mark extroot erase"
+  mark_extroot_erase
+}
+
+do_hard() {
+  hx_log I "hard reset requested -> mark extroot erase"
+  # reserved for future: also wipe /mnt/custom, provisioning, etc.
+  mark_extroot_erase
 }
 
 if ! confirm; then
@@ -106,8 +103,8 @@ if ! confirm; then
 fi
 
 case "$MODE" in
-  hard) hard_reset ;;
-  soft) soft_reset ;;
+  soft) do_soft ;;
+  hard) do_hard ;;
   *)
     hx_log E "invalid mode=$MODE"
     echo "BUG: invalid mode=$MODE" >&2
@@ -115,11 +112,13 @@ case "$MODE" in
     ;;
 esac
 
+# default: reboot for actual effect (wipe happens next boot in preinit)
 if [ "$DO_REBOOT" -eq 1 ]; then
   hx_log I "rebooting..."
   sync
   reboot
+else
+  hx_log I "done (mode=$MODE). NOTE: wipe will happen on next reboot."
 fi
 
-hx_log I "done (mode=$MODE reboot=$DO_REBOOT)"
 exit 0

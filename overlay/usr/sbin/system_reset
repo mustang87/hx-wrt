@@ -1,14 +1,11 @@
 #!/bin/sh
 # HX-WRT system_reset: unified reset entry (soft/hard)
-# - soft: wipe extroot overlay runtime dirs on next boot (via 79_hx_disk_ready)
-# - hard: same mechanism (currently identical), reserved for future "deeper wipe"
-#
-# Logs:
-#   /overlay/hx/log/reset.log (or /tmp/.hxwrt/boot.log before overlay ready)
+# - soft: keep /mnt/etc, wipe runtime dirs next boot
+# - hard: wipe /mnt/etc too (factory)
+# Trigger file is created under /overlay, then preinit(79_hx_disk_ready) wipes on raw ubifs (/mnt).
 
 set -eu
 
-# logging
 if [ -f /usr/lib/hxwrt/log.sh ]; then
 	. /usr/lib/hxwrt/log.sh
 	hx_log_init "reset" "reset.log"
@@ -26,12 +23,6 @@ usage() {
 	cat <<'EOF'
 Usage:
   system_reset [--soft|--hard] [-y] [-r]
-
-Options:
-  --soft        Soft reset: mark extroot overlay for runtime wipe on next boot (default)
-  --hard        Hard reset: mark extroot overlay for runtime wipe on next boot
-  -y            Assume yes (no prompt)
-  -r            Reboot after marking reset
 EOF
 }
 
@@ -42,11 +33,7 @@ while [ $# -gt 0 ]; do
 		-y) ASSUME_Y=1 ;;
 		-r) DO_REBOOT=1 ;;
 		-h|--help) usage; exit 0 ;;
-		*)
-			echo "Unknown arg: $1" >&2
-			usage
-			exit 1
-			;;
+		*) echo "Unknown arg: $1" >&2; usage; exit 1 ;;
 	esac
 	shift
 done
@@ -59,44 +46,31 @@ confirm() {
 }
 
 is_overlay_ready() {
-	# root is overlayfs (upper on /overlay)
-	mount | grep -qE '^overlayfs:/overlay on / '
+	# allow either: root overlayfs, or /overlay mounted ubifs (normal runtime)
+	mount | grep -qE '^overlayfs:/overlay on / ' && return 0
+	mount | grep -qE ' on /overlay ' && return 0
+	return 1
 }
 
 mark_extroot_wipe() {
 	is_overlay_ready || {
-		hx_log E "overlayfs not mounted; cannot mark extroot wipe"
-		echo "ERROR: overlayfs not mounted; cannot mark extroot wipe." >&2
+		hx_log E "overlay not ready; cannot mark extroot wipe"
+		echo "ERROR: overlay not ready; cannot mark extroot wipe." >&2
 		exit 2
 	}
 
-	# Create flag for preinit wipe policy (handled in 79_hx_disk_ready via /mnt mount)
-	touch /overlay/.extroot-erase
+	case "$MODE" in
+		soft) : > /overlay/.extroot-erase-soft ;;
+		hard) : > /overlay/.extroot-erase-hard ;;
+	esac
 	sync
-	hx_log I "reset flag created: /overlay/.extroot-erase (mode=$MODE)"
+	hx_log I "reset flag created (mode=$MODE)"
 	hx_log_kmsg "reset flag created (mode=$MODE)"
 }
 
-if ! confirm; then
-	hx_log W "user aborted"
-	exit 0
-fi
+confirm || { hx_log W "user aborted"; exit 0; }
 
-case "$MODE" in
-	soft)
-		hx_log I "soft reset requested -> mark extroot wipe"
-		mark_extroot_wipe
-		;;
-	hard)
-		hx_log I "hard reset requested -> mark extroot wipe"
-		mark_extroot_wipe
-		;;
-	*)
-		hx_log E "invalid mode=$MODE"
-		echo "BUG: invalid mode=$MODE" >&2
-		exit 9
-		;;
-esac
+mark_extroot_wipe
 
 if [ "$DO_REBOOT" -eq 1 ]; then
 	hx_log I "rebooting..."

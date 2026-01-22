@@ -16,5 +16,6 @@ chmod +x "${ROOT_DIR}/overlay/etc/rc.button/"* 2>/dev/null || true
 chmod +x "${ROOT_DIR}/overlay/lib/preinit/"* 2>/dev/null || true
 chmod +x "${ROOT_DIR}/overlay/usr/lib/hxwrt/"*.sh 2>/dev/null || true
 chmod +x "${ROOT_DIR}/overlay/usr/sbin/"* 2>/dev/null || true
+chmod +x "${ROOT_DIR}/overlay/sbin/"* 2>/dev/null || true
 
 echo "[PREP] chmod done"

@@ -1,0 +1,23 @@
+#!/bin/sh
+# HX-WRT sysupgrade wrapper:
+# - if user requests NO preserve config (-n), then wipe extroot overlay on next boot (HARD)
+
+set -eu
+
+ROM_SYSUPGRADE="/rom/sbin/sysupgrade"
+[ -x "$ROM_SYSUPGRADE" ] || ROM_SYSUPGRADE="/sbin/sysupgrade"
+
+need_wipe=0
+for arg in "$@"; do
+	case "$arg" in
+		-n|--no-preserve-config) need_wipe=1 ;;
+	esac
+done
+
+if [ "$need_wipe" = "1" ]; then
+	# mark under extroot overlay; preinit will wipe raw ubifs at next boot
+	: > /overlay/.extroot-erase-hard 2>/dev/null || true
+	sync
+fi
+
+exec "$ROM_SYSUPGRADE" "$@"

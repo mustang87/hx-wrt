@@ -4,23 +4,44 @@ set -e
 . /usr/lib/hxwrt/log.sh
 hx_log_redirect "uci-defaults" "99-hx-finish.log"
 
+log() { echo "[$(date '+%F %T')] $*"; }
+
+log "finish start"
+
 # Apply network/dhcp changes
-/etc/init.d/network restart || true
-/etc/init.d/dnsmasq restart || true
+log "restart network"
+/etc/init.d/network restart || log "network restart failed"
+log "restart dnsmasq"
+/etc/init.d/dnsmasq restart || log "dnsmasq restart failed"
 
 # # Apply wifi (if wifi exists)
-wifi reload || wifi up || true
+log "reload wifi"
+wifi reload || wifi up || log "wifi reload failed"
 
 # # ✅ Ensure firewall is enabled and running
+log "enable firewall"
 /etc/init.d/firewall enable || true
-/etc/init.d/firewall restart || /etc/init.d/firewall start || true
+log "restart firewall"
+/etc/init.d/firewall restart || /etc/init.d/firewall start || log "firewall restart failed"
 # /etc/init.d/rpcd restart || true
 
 # Ensure uhttpd is enabled and running
+log "enable uhttpd"
 /etc/init.d/uhttpd enable || true
-/etc/init.d/uhttpd restart || /etc/init.d/uhttpd start || true
+log "restart uhttpd"
+/etc/init.d/uhttpd restart || /etc/init.d/uhttpd start || log "uhttpd restart failed"
 
+# Ensure SSH is enabled and running
+if [ -x /etc/init.d/dropbear ]; then
+  log "enable dropbear"
+  /etc/init.d/dropbear enable || true
+  log "restart dropbear"
+  /etc/init.d/dropbear restart || /etc/init.d/dropbear start || log "dropbear restart failed"
+else
+  log "dropbear init not found"
+fi
 
+log "finish done"
 echo "[OK] finish done"
 exit 0
   

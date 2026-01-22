@@ -190,4 +190,5 @@ hxrp_main() {
 }
 
 # Run late in preinit_main so /overlay is already mounted by 79_hx_disk_ready
-boot_hook_add preinit_main hxrp_main
+boot_hook_add preinit_mount_root hxrp_main
+

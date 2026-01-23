@@ -12,6 +12,9 @@
 . /lib/functions/preinit.sh
 . /usr/lib/hxwrt/log.sh
 
+# === NEW: load reset policy as library (no preinit hook inside) ===
+[ -f /lib/preinit/79-hxwrt-reset-policy.sh ] && . /lib/preinit/79-hxwrt-reset-policy.sh
+
 HX_LOG_COMPONENT="preinit"
 hx_log_init "preinit" "preinit.log"
 
@@ -88,64 +91,6 @@ hx_persist_fstab_to_mnt() {
 	hx_log I "disk_ready: persisted fstab.overlay into extroot (/mnt/etc/config) device=$dev"
 }
 
-# wipe policy executed ONLY when /mnt is raw ubifs extroot
-hx_wipe_policy_on_mnt() {
-	local rom_id ovl_id wiped
-	wiped=0
-
-	# reset flags
-	local hard=0 soft=0
-	[ -e /mnt/.extroot-erase-hard ] && hard=1
-	[ -e /mnt/.extroot-erase-soft ] && soft=1
-
-	if [ "$hard" -eq 1 ]; then
-		hx_log W "disk_ready: found HARD flag -> factory wipe"
-		wiped=2
-	elif [ "$soft" -eq 1 ]; then
-		hx_log W "disk_ready: found SOFT flag -> runtime wipe"
-		wiped=1
-	fi
-
-	# build_id -> treat as SOFT wipe
-	rom_id="$(tr -d '\r\n' </rom/etc/hxwrt_build_id 2>/dev/null || true)"
-	ovl_id="$(tr -d '\r\n' </mnt/.hxwrt/build_id 2>/dev/null || true)"
-
-	if [ -n "$rom_id" ]; then
-		if [ -z "$ovl_id" ] || [ "$rom_id" != "$ovl_id" ]; then
-			hx_log W "disk_ready: build_id changed (rom='$rom_id' ovl='$ovl_id') -> SOFT wipe"
-			[ "$wiped" -lt 1 ] && wiped=1
-		fi
-	else
-		hx_log W "disk_ready: ROM build_id empty -> skip auto wipe"
-	fi
-
-	[ "$wiped" -ge 1 ] || return 0
-
-	if [ "$wiped" -eq 2 ]; then
-		hx_log W "disk_ready: HARD wipe /mnt/{upper,work,etc,.fs_state,.hxwrt}"
-		rm -rf /mnt/upper /mnt/work /mnt/etc /mnt/.fs_state /mnt/.hxwrt 2>/dev/null || true
-	else
-		hx_log W "disk_ready: SOFT wipe /mnt/{upper,work,.fs_state,.hxwrt} (keep /mnt/etc)"
-		rm -rf /mnt/upper /mnt/work /mnt/.fs_state /mnt/.hxwrt 2>/dev/null || true
-	fi
-
-	rm -f /mnt/.extroot-erase-hard /mnt/.extroot-erase-soft 2>/dev/null || true
-
-	# recreate required dirs
-	mkdir -p /mnt/upper /mnt/work 2>/dev/null || true
-	[ "$wiped" -eq 2 ] && mkdir -p /mnt/etc 2>/dev/null || true
-
-	# record build id
-	if [ -n "$rom_id" ]; then
-		mkdir -p /mnt/.hxwrt 2>/dev/null || true
-		printf '%s\n' "$rom_id" > /mnt/.hxwrt/build_id 2>/dev/null || true
-	fi
-
-	sync
-	hx_log W "disk_ready: wipe done (level=$wiped)"
-	return 0
-}
-
 hx_ubifs_extroot_prepare_wr3000k() {
 	# only run if MTD partition named "ubi1" exists
 	grep -qs '"ubi1"' /proc/mtd || return 0
@@ -197,17 +142,19 @@ hx_ubifs_extroot_prepare_wr3000k() {
 	local voldev="/dev/$(basename "$volpath")"
 	hx_mknod_from_sysfs "$volpath/dev" "$voldev" 0600 || { hx_log E "disk_ready: cannot create node $voldev"; return 0; }
 
-	# mount raw ubifs once, do wipe policy, write fstab (current + persistent), then umount
+	# mount raw ubifs once, run wipe policy (AFTER mount!), write fstab (current + persistent), then umount
 	if ! hx_mount_raw_ubifs "$voldev"; then
 		hx_log E "disk_ready: mount raw ubifs to /mnt failed (voldev=$voldev)"
 		return 0
 	fi
 
-	hx_wipe_policy_on_mnt
+	# === FIX: enforce order here ===
+	if command -v hxrp_wipe_policy_on_mnt >/dev/null 2>&1; then
+		hxrp_wipe_policy_on_mnt
+	else
+		hx_log W "disk_ready: reset-policy library missing -> skip wipe policy"
+	fi
 
-	# Write fstab in two places:
-	# - current /etc/config (for this boot)
-	# - /mnt/etc/config (persistent on extroot)
 	hx_set_fstab_current "$voldev"
 	hx_persist_fstab_to_mnt "$voldev"
 
@@ -217,4 +164,5 @@ hx_ubifs_extroot_prepare_wr3000k() {
 	return 0
 }
 
+# === The ONLY preinit hook: order is guaranteed ===
 boot_hook_add preinit_main hx_ubifs_extroot_prepare_wr3000k

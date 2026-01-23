@@ -2,108 +2,139 @@
 START=05
 STOP=90
 
-CUSTOM_MTD_NUM="7"
-CUSTOM_MTD="/dev/mtd${CUSTOM_MTD_NUM}"
+. /lib/functions.sh
 
-UBI_DEV_ID="2"
-UBI_DEV="/dev/ubi${UBI_DEV_ID}"
-UBI_VOL_NAME="custom"
-MNT="/mnt/custom"
+TAG="hx-storage"
+log() { logger -t "${TAG}" "$*"; echo "[${TAG}] $*"; }
+
+is_mounted() { grep -qs " ${1} " /proc/mounts; }
+
+HX_DATA_VOL="hx_data"
+HX_DATA_MNT="/mnt/hx-data"
 
 OC_ETC="/etc/openclash"
 OC_TMP="/tmp/openclash"
 
-# Persist GEO on overlay (with built-in extroot this is ubi1, ~40M)
-GEO_DIR="/overlay/hx/openclash/geo"
+DATA_OC="${HX_DATA_MNT}/openclash"
+DATA_CORE="${DATA_OC}/core"
+DATA_GEO="${DATA_OC}/geo"
+DATA_RULEP="${DATA_OC}/rule_provider"
+DATA_STATE="${DATA_OC}/state"
 
-log() { logger -t hx-storage "$*"; echo "[hx-storage] $*"; }
-
-# BusyBox-safe mount check
-is_mounted() { grep -qs " ${1} " /proc/mounts; }
+find_ubi_by_mtdnum() {
+	local mtdnum="$1" u
+	for u in /sys/class/ubi/ubi*; do
+		[ -d "$u" ] || continue
+		[ -f "$u/mtd_num" ] || continue
+		[ "$(cat "$u/mtd_num" 2>/dev/null)" = "$mtdnum" ] || continue
+		basename "$u" | sed 's/^ubi//'
+		return 0
+	done
+	return 1
+}
 
 ensure_dirs() {
-  mkdir -p "${MNT}" \
-           "${OC_ETC}" \
-           "${OC_TMP}/cache" "${OC_TMP}/log" \
-           "${GEO_DIR}" \
-           "${MNT}/openclash/core" "${MNT}/openclash/state" >/dev/null 2>&1 || true
+	mkdir -p \
+		"${HX_DATA_MNT}" \
+		"${OC_ETC}" \
+		"${OC_TMP}/cache" "${OC_TMP}/log" \
+		"${DATA_CORE}" "${DATA_GEO}" "${DATA_RULEP}" "${DATA_STATE}" >/dev/null 2>&1 || true
 }
 
-attach_custom_ubi() {
-  [ -c "${UBI_DEV}" ] && return 0
+attach_ubi1() {
+	grep -qs '"ubi1"' /proc/mtd || return 1
 
-  ubidetach -p "${CUSTOM_MTD}" >/dev/null 2>&1 || true
+	local mtdnum
+	mtdnum="$(awk -F: '/"ubi1"/{gsub("mtd","",$1); print $1}' /proc/mtd | head -n1)"
+	[ -n "$mtdnum" ] || return 1
 
-  if ubiattach -m "${CUSTOM_MTD_NUM}" -d "${UBI_DEV_ID}" >/dev/null 2>&1; then
-    return 0
-  fi
+	ubiattach -p "/dev/mtd${mtdnum}" --max-beb-per1024=2 >/dev/null 2>&1 || true
 
-  ubiattach -m "${CUSTOM_MTD_NUM}" >/dev/null 2>&1 && return 0
-  return 1
+	local ubidx
+	for _ in 1 2 3 4 5 6 7 8 9 10; do
+		ubidx="$(find_ubi_by_mtdnum "$mtdnum" 2>/dev/null || true)"
+		[ -n "$ubidx" ] && break
+		sleep 1
+	done
+	[ -n "$ubidx" ] || return 1
+
+	echo "$ub2"
 }
 
-ensure_ubifs_volume() {
-  if ubinfo "${UBI_DEV}" -N "${UBI_VOL_NAME}" >/dev/null 2>&1; then
-    return 0
-  fi
-
-  # Custom 16MiB 很紧：创建 12MiB 卷更稳
-  ubimkvol "${UBI_DEV}" -N "${UBI_VOL_NAME}" -s 12MiB >/dev/null 2>&1
-}
-
-mount_custom() {
-  is_mounted "${MNT}" && return 0
-  mount -t ubifs "ubi${UBI_DEV_ID}:${UBI_VOL_NAME}" "${MNT}" >/dev/null 2>&1
+mount_data() {
+	local ubidx="$1"
+	is_mounted "${HX_DATA_MNT}" && return 0
+	mount -t ubifs "ubi${ubidx}:${HX_DATA_VOL}" "${HX_DATA_MNT}" >/dev/null 2>&1
 }
 
 link_openclash_paths() {
-  # core -> custom
-  if [ -d "${OC_ETC}/core" ] && [ ! -L "${OC_ETC}/core" ]; then
-    if [ -z "$(ls -A "${MNT}/openclash/core" 2>/dev/null)" ]; then
-      mv "${OC_ETC}/core/"* "${MNT}/openclash/core/" 2>/dev/null || true
-    fi
-    rm -rf "${OC_ETC}/core" 2>/dev/null || true
-  fi
-  ln -snf "${MNT}/openclash/core" "${OC_ETC}/core"
+	# core -> data disk
+	if [ -d "${OC_ETC}/core" ] && [ ! -L "${OC_ETC}/core" ]; then
+		if [ -z "$(ls -A "${DATA_CORE}" 2>/dev/null)" ]; then
+			mv "${OC_ETC}/core/"* "${DATA_CORE}/" 2>/dev/null || true
+		fi
+		rm -rf "${OC_ETC}/core" 2>/dev/null || true
+	fi
+	ln -snf "${DATA_CORE}" "${OC_ETC}/core"
 
-  # GEO -> persistent
-  mkdir -p "${GEO_DIR}" >/dev/null 2>&1 || true
-  ln -sf "${GEO_DIR}/GeoIP.dat"    "${OC_ETC}/GeoIP.dat"
-  ln -sf "${GEO_DIR}/GeoSite.dat"  "${OC_ETC}/GeoSite.dat"
-  ln -sf "${GEO_DIR}/Country.mmdb" "${OC_ETC}/Country.mmdb"
+	# rule_provider -> data disk
+	if [ -d "${OC_ETC}/rule_provider" ] && [ ! -L "${OC_ETC}/rule_provider" ]; then
+		if [ -z "$(ls -A "${DATA_RULEP}" 2>/dev/null)" ]; then
+			mv "${OC_ETC}/rule_provider/"* "${DATA_RULEP}/" 2>/dev/null || true
+		fi
+		rm -rf "${OC_ETC}/rule_provider" 2>/dev/null || true
+	fi
+	ln -snf "${DATA_RULEP}" "${OC_ETC}/rule_provider"
 
-  # cache -> tmpfs
-  if [ -e "${OC_ETC}/cache" ] && [ ! -L "${OC_ETC}/cache" ]; then
-    rm -rf "${OC_ETC}/cache" 2>/dev/null || true
-  fi
-  ln -snf "${OC_TMP}/cache" "${OC_ETC}/cache"
+	# GEO -> data disk
+	ln -sf "${DATA_GEO}/GeoIP.dat"    "${OC_ETC}/GeoIP.dat"
+	ln -sf "${DATA_GEO}/GeoSite.dat"  "${OC_ETC}/GeoSite.dat"
+	ln -sf "${DATA_GEO}/Country.mmdb" "${OC_ETC}/Country.mmdb"
+
+	# cache -> tmpfs
+	if [ -e "${OC_ETC}/cache" ] && [ ! -L "${OC_ETC}/cache" ]; then
+		rm -rf "${OC_ETC}/cache" 2>/dev/null || true
+	fi
+	ln -snf "${OC_TMP}/cache" "${OC_ETC}/cache"
 }
 
 start() {
-  log "start"
-  ensure_dirs
+	log "start"
+	ensure_dirs
 
-  if ! attach_custom_ubi; then
-    log "ERROR: ubiattach mtd${CUSTOM_MTD_NUM} failed"
-    return 1
-  fi
+	local mtdnum ubidx
+	mtdnum="$(awk -F: '/"ubi1"/{gsub("mtd","",$1); print $1}' /proc/mtd | head -n1)"
+	if [ -z "$mtdnum" ]; then
+		log "ERROR: cannot find mtd index for ubi1"
+		return 1
+	fi
 
-  ensure_ubifs_volume || true
+	ubiattach -p "/dev/mtd${mtdnum}" --max-beb-per1024=2 >/dev/null 2>&1 || true
 
-  if ! mount_custom; then
-    log "ERROR: mount custom ubifs failed"
-    return 1
-  fi
+	ubidx=""
+	for _ in 1 2 3 4 5 6 7 8 9 10; do
+		ubidx="$(find_ubi_by_mtdnum "$mtdnum" 2>/dev/null || true)"
+		[ -n "$ubidx" ] && break
+		sleep 1
+	done
+	if [ -z "$ubidx" ]; then
+		log "ERROR: cannot map mtd${mtdnum} to ubiX"
+		return 1
+	fi
 
-  ensure_dirs
-  link_openclash_paths
+	if ! mount_data "${ubidx}"; then
+		log "ERROR: mount data disk failed (ubi${ubidx}:${HX_DATA_VOL} -> ${HX_DATA_MNT})"
+		return 1
+	fi
 
-  log "OK: custom mounted at ${MNT}; openclash core->custom; geo->persistent; cache->tmpfs"
-  return 0
+	ensure_dirs
+	link_openclash_paths
+
+	log "OK: data mounted at ${HX_DATA_MNT}; openclash core/geo/rule_provider redirected"
+	return 0
 }
 
 stop() {
-  log "stop"
-  umount "${MNT}" >/dev/null 2>&1 || true
-  ubidetach -p "${CUSTOM_MTD}" >/dev/null 2>&1 || true
+	log "stop"
+	umount "${HX_DATA_MNT}" >/dev/null 2>&1 || true
 }

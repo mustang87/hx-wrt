@@ -1,35 +1,34 @@
 #!/bin/sh
-# HX-WRT system_reset: unified reset entry (soft/hard)
-# - soft: keep /mnt/etc, wipe runtime dirs next boot
-# - hard: wipe /mnt/etc too (factory)
-# Trigger file is created under /overlay, then preinit(79_hx_disk_ready) wipes on raw ubifs (/mnt).
+# HX-WRT system_reset: unified reset entry
+#
+# New architecture:
+# - /overlay stays on system flash, so reset uses standard OpenWrt firstboot.
+# - optional: --wipe-data can wipe data disk (/mnt/hx-data) as well.
 
 set -eu
 
-if [ -f /usr/lib/hxwrt/log.sh ]; then
-	. /usr/lib/hxwrt/log.sh
-	hx_log_init "reset" "reset.log"
-	hx_log I "system_reset start: argv='$*'"
-else
-	hx_log() { :; }
-	hx_log_kmsg() { :; }
-fi
-
-MODE="soft"
+MODE="factory"
+WIPE_DATA=0
 ASSUME_Y=0
 DO_REBOOT=0
 
 usage() {
 	cat <<'EOF'
 Usage:
-  system_reset [--soft|--hard] [-y] [-r]
+  system_reset [--factory] [--wipe-data] [-y] [-r]
+
+Options:
+  --factory     factory reset via firstboot (default)
+  --wipe-data   also wipe /mnt/hx-data/openclash (core/geo/rule_provider/state)
+  -y            assume yes
+  -r            reboot after reset
 EOF
 }
 
 while [ $# -gt 0 ]; do
 	case "$1" in
-		--soft) MODE="soft" ;;
-		--hard) MODE="hard" ;;
+		--factory) MODE="factory" ;;
+		--wipe-data) WIPE_DATA=1 ;;
 		-y) ASSUME_Y=1 ;;
 		-r) DO_REBOOT=1 ;;
 		-h|--help) usage; exit 0 ;;
@@ -45,38 +44,36 @@ confirm() {
 	[ "${ans:-}" = "y" ] || [ "${ans:-}" = "Y" ]
 }
 
-is_overlay_ready() {
-	# allow either: root overlayfs, or /overlay mounted ubifs (normal runtime)
-	mount | grep -qE '^overlayfs:/overlay on / ' && return 0
-	mount | grep -qE ' on /overlay ' && return 0
-	return 1
+wipe_data_disk() {
+	if grep -qs " /mnt/hx-data " /proc/mounts; then
+		rm -rf /mnt/hx-data/openclash/core \
+		       /mnt/hx-data/openclash/geo \
+		       /mnt/hx-data/openclash/rule_provider \
+		       /mnt/hx-data/openclash/state 2>/dev/null || true
+		mkdir -p /mnt/hx-data/openclash/core \
+		         /mnt/hx-data/openclash/geo \
+		         /mnt/hx-data/openclash/rule_provider \
+		         /mnt/hx-data/openclash/state 2>/dev/null || true
+		sync
+	else
+		echo "WARN: /mnt/hx-data not mounted, skip wipe-data" >&2
+	fi
 }
 
-mark_extroot_wipe() {
-	is_overlay_ready || {
-		hx_log E "overlay not ready; cannot mark extroot wipe"
-		echo "ERROR: overlay not ready; cannot mark extroot wipe." >&2
-		exit 2
-	}
+confirm || exit 0
 
-	case "$MODE" in
-		soft) : > /overlay/.extroot-erase-soft ;;
-		hard) : > /overlay/.extroot-erase-hard ;;
-	esac
-	sync
-	hx_log I "reset flag created (mode=$MODE)"
-	hx_log_kmsg "reset flag created (mode=$MODE)"
-}
+if [ "$WIPE_DATA" -eq 1 ]; then
+	wipe_data_disk
+fi
 
-confirm || { hx_log W "user aborted"; exit 0; }
+if command -v firstboot >/dev/null 2>&1; then
+	firstboot -y
+fi
 
-mark_extroot_wipe
+sync
 
 if [ "$DO_REBOOT" -eq 1 ]; then
-	hx_log I "rebooting..."
-	sync
 	reboot
 fi
 
-hx_log I "done (mode=$MODE reboot=$DO_REBOOT)"
 exit 0

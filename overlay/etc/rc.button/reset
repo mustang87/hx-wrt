@@ -1,12 +1,10 @@
 #!/bin/sh
 # HX-WRT reset button handler
 # - short press: reboot
-# - long press (>=5s): hard reset (system_reset --hard -y -r)
+# - long press (>=5s): factory reset (firstboot -y && reboot)
 #
-# Logs:
-#   /overlay/hx/log/button-reset.log (or /tmp/.hxwrt/boot.log if overlay not ready)
+# New storage architecture: NO extroot overlay, so do not depend on extroot wipe flags.
 
-# logging
 if [ -f /usr/lib/hxwrt/log.sh ]; then
   . /usr/lib/hxwrt/log.sh
   hx_log_init "button-reset" "button-reset.log"
@@ -16,25 +14,9 @@ fi
 
 . /lib/functions.sh
 
-OVERLAY="$(grep ' /overlay ' /proc/mounts || true)"
-
-hx_log I "action=${ACTION:-} seen=${SEEN:-} overlay_mounted=$([ -n "$OVERLAY" ] && echo 1 || echo 0)"
-
 case "$ACTION" in
   pressed)
-    [ -z "$OVERLAY" ] && {
-      hx_log W "pressed but overlay not mounted; ignore"
-      return 0
-    }
-    # allow 5 seconds window
     return 5
-    ;;
-  timeout)
-    hx_log W "timeout -> failsafe (if supported)"
-    if [ -f /etc/diag.sh ]; then
-      . /etc/diag.sh
-      set_state failsafe
-    fi
     ;;
   released)
     if [ "${SEEN:-0}" -lt 1 ]; then
@@ -45,17 +27,14 @@ case "$ACTION" in
       return 0
     fi
 
-    if [ "${SEEN:-0}" -ge 5 ] && [ -n "$OVERLAY" ]; then
-      hx_log W "long press -> hard reset"
-      echo "HX-WRT: HARD RESET" > /dev/console
-      if [ -x /usr/sbin/system_reset ]; then
-        /usr/sbin/system_reset --hard -y -r &
-      else
-        hx_log E "system_reset missing, fallback touch flag + reboot"
-        touch /overlay/.extroot-erase 2>/dev/null || true
-        sync
-        reboot &
+    if [ "${SEEN:-0}" -ge 5 ]; then
+      hx_log W "long press -> factory reset (firstboot)"
+      echo "HX-WRT: FACTORY RESET" > /dev/console
+      if command -v firstboot >/dev/null 2>&1; then
+        firstboot -y
       fi
+      sync
+      reboot &
       return 0
     fi
     ;;

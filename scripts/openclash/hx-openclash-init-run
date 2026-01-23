@@ -2,27 +2,22 @@
 set -eu
 
 # =========================
-# CONFIG (edit here)
+# CONFIG
 # =========================
 
-# Core (meta/mihomo)
 URL_CORE_TGZ="https://bryan-pub26.oss-cn-shenzhen.aliyuncs.com/hx/vps/clash-linux-arm64.tar.gz"
 
-# GEO (persistent on overlay/extroot)
 URL_GEOIP="https://bryan-pub26.oss-cn-shenzhen.aliyuncs.com/hx/vps/geoip.dat"
 URL_GEOSITE="https://bryan-pub26.oss-cn-shenzhen.aliyuncs.com/hx/vps/geosite.dat"
 URL_MMDB="https://bryan-pub26.oss-cn-shenzhen.aliyuncs.com/hx/vps/Country.mmdb"
 
-# Network probe
 PING_IP="223.5.5.5"
 PING_TRIES="3"
-
-# Fetch retry
 FETCH_TRIES="3"
 FETCH_SLEEP="2"
 
 # =========================
-# Paths / Constants
+# Paths
 # =========================
 . /usr/lib/hxwrt/log.sh
 LOG="$(hx_log_path "openclash")"
@@ -30,22 +25,19 @@ hx_log_redirect "openclash"
 TAG="hx-openclash-init"
 
 OC_DIR="/etc/openclash"
-CORE_DIR="${OC_DIR}/core"                   # must be symlink -> /mnt/custom/openclash/core
+CORE_DIR="${OC_DIR}/core"
 CORE_BIN="${CORE_DIR}/clash_meta"
 
-CUSTOM_MNT="/mnt/custom"
-CUSTOM_OC_DIR="${CUSTOM_MNT}/openclash"
-CUSTOM_STATE_DIR="${CUSTOM_OC_DIR}/state"
-MARK="${CUSTOM_STATE_DIR}/hx-openclash-init.done"
+DATA_MNT="/mnt/hx-data"
+DATA_OC_DIR="${DATA_MNT}/openclash"
+DATA_STATE_DIR="${DATA_OC_DIR}/state"
+MARK="${DATA_STATE_DIR}/hx-openclash-init.done"
 
 TMP_OC_DIR="/tmp/openclash"
 TMP_CACHE_DIR="${TMP_OC_DIR}/cache"
 
-GEO_DIR="/overlay/hx/openclash/geo"
+GEO_DIR="${DATA_OC_DIR}/geo"
 
-# =========================
-# Helpers
-# =========================
 log() { echo "[$(date -Is)] $*" >> "$LOG"; }
 die() { log "ERROR: $*"; logger -t "$TAG" "ERROR: $* (see $LOG)"; exit 1; }
 
@@ -59,8 +51,6 @@ has_openclash() {
 fetch_one() {
   url="$1"
   out="$2"
-
-  # download to temp then atomic rename
   tmp="${out}.part"
   rm -f "$tmp" >/dev/null 2>&1 || true
 
@@ -70,7 +60,6 @@ fetch_one() {
     wget -4 -O "$tmp" -T 240 "$url" >>"$LOG" 2>&1
   fi
 
-  # basic sanity check: non-empty
   [ -s "$tmp" ] || return 1
   mv -f "$tmp" "$out"
   return 0
@@ -94,7 +83,7 @@ fetch() {
 }
 
 ensure_dirs() {
-  mkdir -p "$OC_DIR" "$TMP_CACHE_DIR" "$CUSTOM_STATE_DIR" "$GEO_DIR" >/dev/null 2>&1 || true
+  mkdir -p "$OC_DIR" "$TMP_CACHE_DIR" "$DATA_STATE_DIR" "$GEO_DIR" >/dev/null 2>&1 || true
 }
 
 net_ready() {
@@ -110,13 +99,11 @@ net_ready() {
 }
 
 seed_links() {
-  # GEO -> persistent
   mkdir -p "$GEO_DIR" >/dev/null 2>&1 || true
   ln -sf "$GEO_DIR/GeoIP.dat"    "$OC_DIR/GeoIP.dat"
   ln -sf "$GEO_DIR/GeoSite.dat"  "$OC_DIR/GeoSite.dat"
   ln -sf "$GEO_DIR/Country.mmdb" "$OC_DIR/Country.mmdb"
 
-  # cache -> tmpfs
   if [ -e "$OC_DIR/cache" ] && [ ! -L "$OC_DIR/cache" ]; then
     rm -rf "$OC_DIR/cache" >/dev/null 2>&1 || true
   fi
@@ -124,7 +111,6 @@ seed_links() {
 }
 
 install_core() {
-  # core is persistent via symlink to custom
   mkdir -p "$CORE_DIR" >/dev/null 2>&1 || true
 
   if [ -x "$CORE_BIN" ]; then
@@ -152,8 +138,7 @@ install_core() {
 }
 
 download_geo() {
-  log "ensure geo (persistent)"
-
+  log "ensure geo (data disk)"
   mkdir -p "$GEO_DIR" >/dev/null 2>&1 || true
 
   [ -s "$GEO_DIR/GeoIP.dat" ]    || fetch "$URL_GEOIP"   "$GEO_DIR/GeoIP.dat"    || log "WARN: GeoIP download failed"
@@ -174,22 +159,21 @@ if ! has_openclash; then
   exit 0
 fi
 
-# wait custom mount (max 90s)
+# wait data mount (max 90s)
 i=0
-while ! grep -qs " ${CUSTOM_MNT} " /proc/mounts; do
+while ! grep -qs " ${DATA_MNT} " /proc/mounts; do
   i=$((i+1))
   [ "$i" -ge 90 ] && break
   sleep 1
 done
 
-if ! grep -qs " ${CUSTOM_MNT} " /proc/mounts; then
-  log "${CUSTOM_MNT} not mounted, exit (wait next boot)"
+if ! grep -qs " ${DATA_MNT} " /proc/mounts; then
+  log "${DATA_MNT} not mounted, exit (wait next boot)"
   exit 1
 fi
 
-
-
-# core 必须是软链（由 hx-storage 负责创建）
+# IMPORTANT: core directory must be symlink (provided by hx-storage),
+# otherwise OpenClash will write binaries into overlay.
 if [ ! -L "$CORE_DIR" ]; then
   log "${CORE_DIR} is not symlink, exit (avoid overlay writes)"
   exit 1
@@ -198,19 +182,14 @@ fi
 ensure_dirs
 seed_links
 
-# 网络未就绪则让 procd 下次重试
 if ! net_ready; then
   log "network not ready, retry next boot"
   exit 1
 fi
 
-# Always ensure GEO files exist on every boot
 download_geo || true
-
-# Always ensure core exists on every boot
 install_core || die "core install failed"
 
-# 已完成就退出（mark only)
 if [ -f "$MARK" ]; then
   log "already done, exit"
   exit 0
@@ -219,5 +198,4 @@ fi
 date > "$MARK"
 log "done, mark written: $MARK"
 logger -t "$TAG" "done (see $LOG)"
-
 exit 0

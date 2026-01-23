@@ -20,13 +20,11 @@ if ! has_openclash; then
   exit 0
 fi
 
-# run 脚本必须存在
 if [ ! -x /usr/bin/hx-openclash-init-run ]; then
   echo "[$(date -Is)] /usr/bin/hx-openclash-init-run missing, skip" >> "$LOG"
   exit 0
 fi
 
-# 装 init.d（如果你已经打进固件可省略）
 if [ ! -x /etc/init.d/hx-openclash-init ]; then
   cat > /etc/init.d/hx-openclash-init <<'EOF'
 #!/bin/sh /etc/rc.common
@@ -34,7 +32,7 @@ START=99
 USE_PROCD=1
 start_service() {
   procd_open_instance
-  # 延迟，等待 hx-storage 先把 /mnt/custom 挂好
+  # Delay: wait hx-storage mounts /mnt/hx-data and redirects OpenClash paths
   procd_set_param command /bin/sh -c 'sleep 30; /usr/bin/hx-openclash-init-run'
   procd_set_param respawn 0 0 0
   procd_close_instance

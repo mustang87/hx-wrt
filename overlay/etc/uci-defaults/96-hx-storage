@@ -4,9 +4,10 @@ set -e
 . /usr/lib/hxwrt/log.sh
 hx_log_redirect "uci-defaults" "96-storage.log"
 
-# Ensure hx-storage is enabled (mount /mnt/custom and set OpenClash paths)
+# Ensure hx-storage is enabled:
+# - mount ubi1:hx_data to /mnt/hx-data
+# - redirect OpenClash heavy assets (core/geo/rule_provider) to data disk
 /etc/init.d/hx-storage enable >/dev/null 2>&1 || true
 
 echo "[OK] storage done"
-
 exit 0

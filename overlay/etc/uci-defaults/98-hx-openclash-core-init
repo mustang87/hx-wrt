@@ -42,6 +42,8 @@ EOF
 fi
 
 /etc/init.d/hx-openclash-init enable || true
+/etc/init.d/hx-openclash-healthcheck enable 2>/dev/null || true
+
 
 echo "[$(date -Is)] enabled hx-openclash-init" >> "$LOG"
 logger -t "$TAG" "uci-defaults enabled init.d (see $LOG)"

@@ -1,0 +1,133 @@
+#!/bin/sh
+set -eu
+
+TAG="hx-openclash-healthcheck"
+
+DATA_MNT="/mnt/hx-data"
+OC_DIR="/etc/openclash"
+DATA_OC_DIR="${DATA_MNT}/openclash"
+
+CORE_LINK="${OC_DIR}/core"
+CORE_TARGET="${DATA_OC_DIR}/core"
+
+GEO_DIR="${DATA_OC_DIR}/geo"
+GEO_FILES="GeoIP.dat GeoSite.dat Country.mmdb"
+
+RULE_LINK="${OC_DIR}/rule_provider"
+RULE_TARGET="${DATA_OC_DIR}/rule_provider"
+
+# log file (tmp)
+LOG_DIR="/tmp/.hxwrt/openclash"
+LOG="${LOG_DIR}/hx-openclash-healthcheck.log"
+
+mkdir -p "$LOG_DIR" >/dev/null 2>&1 || true
+
+log() { echo "[$(date -Is)] $*" >> "$LOG"; }
+warn() { log "WARN: $*"; logger -t "$TAG" "WARN: $*"; }
+info() { log "INFO: $*"; logger -t "$TAG" "INFO: $*"; }
+
+is_mounted() {
+  grep -qs " ${DATA_MNT} " /proc/mounts
+}
+
+ensure_dir() {
+  mkdir -p "$1" >/dev/null 2>&1 || true
+}
+
+fix_symlink_dir() {
+  # fix_symlink_dir <link> <target>
+  link="$1"
+  target="$2"
+
+  ensure_dir "$target"
+
+  if [ -L "$link" ]; then
+    cur="$(readlink "$link" 2>/dev/null || true)"
+    if [ "$cur" = "$target" ]; then
+      return 0
+    fi
+    ln -snf "$target" "$link"
+    warn "fixed symlink: $link -> $target (was: $cur)"
+    return 0
+  fi
+
+  # not symlink
+  if [ -e "$link" ]; then
+    # If it's a real dir/file, remove it to avoid overlay writes.
+    rm -rf "$link" >/dev/null 2>&1 || true
+    warn "removed non-symlink path to avoid overlay writes: $link"
+  fi
+
+  ln -snf "$target" "$link"
+  warn "created symlink: $link -> $target"
+}
+
+fix_symlink_file() {
+  # fix_symlink_file <link> <target>
+  link="$1"
+  target="$2"
+
+  ensure_dir "${target%/*}"
+
+  if [ -L "$link" ]; then
+    cur="$(readlink "$link" 2>/dev/null || true)"
+    if [ "$cur" = "$target" ]; then
+      return 0
+    fi
+    ln -sf "$target" "$link"
+    warn "fixed symlink: $link -> $target (was: $cur)"
+    return 0
+  fi
+
+  # not symlink
+  if [ -e "$link" ]; then
+    rm -f "$link" >/dev/null 2>&1 || true
+    warn "removed non-symlink file to avoid overlay writes: $link"
+  fi
+
+  ln -sf "$target" "$link"
+  warn "created symlink: $link -> $target"
+}
+
+main() {
+  info "run start"
+
+  # If data disk not mounted, do not "repair" to /tmp - just warn and exit.
+  if ! is_mounted; then
+    warn "${DATA_MNT} not mounted, skip repair (will retry next boot)"
+    exit 1
+  fi
+
+  # Ensure base dirs exist on data disk
+  ensure_dir "$DATA_OC_DIR"
+  ensure_dir "$CORE_TARGET"
+  ensure_dir "$GEO_DIR"
+  ensure_dir "$RULE_TARGET"
+
+  # 1) core dir must be symlink to data disk
+  fix_symlink_dir "$CORE_LINK" "$CORE_TARGET"
+
+  # 2) rule_provider dir must be symlink to data disk (optional but recommended)
+  fix_symlink_dir "$RULE_LINK" "$RULE_TARGET"
+
+  # 3) geo files must be symlinks to data disk
+  for f in $GEO_FILES; do
+    fix_symlink_file "${OC_DIR}/${f}" "${GEO_DIR}/${f}"
+  done
+
+  # 4) report if geo/core missing physically on data disk (doesn't fix download here)
+  if [ ! -x "${CORE_TARGET}/clash_meta" ]; then
+    warn "core binary missing on data disk: ${CORE_TARGET}/clash_meta (init-run should download it)"
+  fi
+
+  for f in $GEO_FILES; do
+    if [ ! -s "${GEO_DIR}/${f}" ]; then
+      warn "geo missing on data disk: ${GEO_DIR}/${f} (init-run should download it)"
+    fi
+  done
+
+  info "run done"
+  exit 0
+}
+
+main "$@"

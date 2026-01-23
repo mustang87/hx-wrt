@@ -19,10 +19,13 @@ FETCH_SLEEP="2"
 # =========================
 # Paths
 # =========================
-. /usr/lib/hxwrt/log.sh
-LOG="$(hx_log_path "openclash")"
-hx_log_redirect "openclash"
+
 TAG="hx-openclash-init"
+
+# Avoid dependency on /usr/lib/hxwrt/log.sh (may use $2 under set -u)
+LOG_DIR="/tmp/.hxwrt/openclash"
+LOG="${LOG_DIR}/hx-openclash-init-run.log"
+mkdir -p "${LOG_DIR}" >/dev/null 2>&1 || true
 
 OC_DIR="/etc/openclash"
 CORE_DIR="${OC_DIR}/core"
@@ -151,7 +154,7 @@ download_geo() {
 # =========================
 # Main
 # =========================
-exec > "$LOG" 2>/dev/null || true
+exec >> "$LOG" 2>&1
 log "run start"
 
 if ! has_openclash; then

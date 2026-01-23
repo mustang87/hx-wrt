@@ -21,6 +21,16 @@ if [ -f "${HXWRT_DIR}/scripts/openclash/hx-openclash-init-run" ]; then
     "${HXWRT_DIR}/overlay/usr/bin/hx-openclash-init-run"
 fi
 
+# OpenClash healthcheck
+if [ -f "${HXWRT_DIR}/scripts/openclash/hx-openclash-healthcheck" ]; then
+  mkdir -p "${HXWRT_DIR}/overlay/usr/bin" >/dev/null 2>&1 || true
+  cp -f \
+    "${HXWRT_DIR}/scripts/openclash/hx-openclash-healthcheck" \
+    "${HXWRT_DIR}/overlay/usr/bin/hx-openclash-healthcheck"
+  chmod +x "${HXWRT_DIR}/overlay/usr/bin/hx-openclash-healthcheck" 2>/dev/null || true
+fi
+
+
 # 1) 注入 overlay -> OpenWrt 的 files/
 rm -rf files
 cp -a "${HXWRT_DIR}/overlay" files

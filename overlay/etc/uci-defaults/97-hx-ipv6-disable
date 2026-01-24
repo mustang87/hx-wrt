@@ -34,6 +34,13 @@ uci set dhcp.@dnsmasq[0].filter_aaaa='1'
 
 uci commit dhcp
 
+# ===== odhcpd config =====
+# Ensure odhcpd is fully disabled even if config exists.
+uci -q set odhcpd.@odhcpd[0].maindhcp='0'
+uci -q set odhcpd.@odhcpd[0].ra='disabled'
+uci -q set odhcpd.@odhcpd[0].dhcpv6='disabled'
+uci commit odhcpd
+
 # ===== Disable odhcpd =====
 /etc/init.d/odhcpd stop >/dev/null 2>&1 || true
 /etc/init.d/odhcpd disable >/dev/null 2>&1 || true

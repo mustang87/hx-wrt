@@ -70,14 +70,18 @@ hx_ubifs_data_prepare_wr3000k() {
 
 	hx_log I "disk_ready: data-disk prepare begin (mtd${mtdnum})"
 
-	ubiattach -p "/dev/mtd${mtdnum}" --max-beb-per1024=2 >/dev/null 2>&1 || true
-
 	local ubidx
-	for _ in 1 2 3 4 5 6 7 8 9 10; do
-		ubidx="$(hx_find_ubi_by_mtdnum "$mtdnum" 2>/dev/null || true)"
-		[ -n "$ubidx" ] && break
-		sleep 1
-	done
+	ubidx="$(hx_find_ubi_by_mtdnum "$mtdnum" 2>/dev/null || true)"
+	if [ -z "$ubidx" ]; then
+		ubiattach -p "/dev/mtd${mtdnum}" --max-beb-per1024=2 >/dev/null 2>&1 || true
+		for _ in 1 2 3 4 5 6 7 8 9 10; do
+			ubidx="$(hx_find_ubi_by_mtdnum "$mtdnum" 2>/dev/null || true)"
+			[ -n "$ubidx" ] && break
+			sleep 1
+		done
+	else
+		hx_log I "disk_ready: ubi already attached (mtd${mtdnum} -> ubi${ubidx})"
+	fi
 	[ -n "$ubidx" ] || { hx_log E "disk_ready: cannot map mtd${mtdnum} to ubiX"; return 0; }
 
 	local ubisys="/sys/class/ubi/ubi${ubidx}"

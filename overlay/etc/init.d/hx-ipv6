@@ -15,7 +15,10 @@ status() {
 apply() {
     uci set hxwrt.ipv6_disable.enabled='1'
     uci commit hx-wrt
-    /etc/uci-defaults/90-hx-ipv6-disable || true
+    if [ -x /etc/uci-defaults/97-hx-ipv6-disable ]; then
+        /etc/uci-defaults/97-hx-ipv6-disable || true
+    fi
+    /etc/init.d/hx-ipv6-policy start >/dev/null 2>&1 || true
 }
 
 enable() {

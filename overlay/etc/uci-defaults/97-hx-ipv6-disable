@@ -12,6 +12,14 @@ fi
 
 logger -t "$LOGTAG" "ipv6-disable: applying IPv6 disable policy"
 
+# Ensure config sections exist (avoid uci failures under set -e)
+if ! uci -q show dhcp.lan >/dev/null 2>&1; then
+    uci set dhcp.lan='dhcp'
+fi
+if ! uci -q show odhcpd.@odhcpd[0] >/dev/null 2>&1; then
+    uci add odhcpd odhcpd >/dev/null 2>&1 || true
+fi
+
 # ===== Network level =====
 uci set network.lan.delegate='0'
 uci set network.wan.delegate='0'

@@ -24,7 +24,7 @@ mkdir -p "$LOG_DIR" >/dev/null 2>&1 || true
 
 log() { echo "[$(date -Is)] $*" >> "$LOG"; }
 warn() { log "WARN: $*"; logger -t "$TAG" "WARN: $*"; }
-info() { log "INFO: $*"; logger -t "$TAG" "INFO: $*"; }
+info() { log "INFO: $*"; }
 
 is_mounted() {
   grep -qs " ${DATA_MNT} " /proc/mounts

@@ -58,13 +58,14 @@ attach_ubi1() {
 	done
 	[ -n "$ubidx" ] || return 1
 
-	echo "$ub2"
+	echo "$ubidx"
 }
 
 mount_data() {
 	local ubidx="$1"
 	is_mounted "${HX_DATA_MNT}" && return 0
-	mount -t ubifs "ubi${ubidx}:${HX_DATA_VOL}" "${HX_DATA_MNT}" >/dev/null 2>&1
+	mount -t ubifs "ubi${ubidx}:${HX_DATA_VOL}" "${HX_DATA_MNT}" >/dev/null 2>&1 || return 1
+	return 0
 }
 
 link_openclash_paths() {

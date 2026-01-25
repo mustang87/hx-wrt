@@ -125,6 +125,46 @@ start() {
 		return 1
 	fi
 
+	# Ensure hx_data volume exists
+	local ubidev="/dev/ubi${ubidx}"
+	if ! ubinfo "${ubidev}" -N "${HX_DATA_VOL}" >/dev/null 2>&1; then
+		log "WARN: ${HX_DATA_VOL} volume missing on ubi${ubidx}, attempting to create..."
+		
+		# Check if ubi1 has system volumes (should be data disk only)
+		local sys_vols=""
+		for vol in kernel rootfs rootfs_data; do
+			if ubinfo "${ubidev}" -N "${vol}" >/dev/null 2>&1; then
+				sys_vols="${sys_vols} ${vol}"
+			fi
+		done
+		
+		# If system volumes exist and no space available, remove them
+		if [ -n "${sys_vols}" ]; then
+			local avail_lebs
+			avail_lebs="$(ubinfo "${ubidev}" 2>/dev/null | awk '/Amount of available logical eraseblocks:/{print $6}')"
+			if [ "${avail_lebs:-0}" = "0" ]; then
+				log "WARN: ubi${ubidx} has system volumes${sys_vols} but should be data disk only"
+				log "WARN: removing system volumes to free space for ${HX_DATA_VOL}..."
+				
+				# Remove system volumes (they should not be mounted if ubi1 is data disk)
+				for vol in kernel rootfs rootfs_data; do
+					if ubinfo "${ubidev}" -N "${vol}" >/dev/null 2>&1; then
+						log "WARN: removing system volume ${vol} from ubi${ubidx} (data disk should not have system volumes)"
+						ubirmvol "${ubidev}" -N "${vol}" >/dev/null 2>&1 || true
+					fi
+				done
+			fi
+		fi
+		
+		# Now try to create hx_data volume
+		if ! ubimkvol "${ubidev}" -m -N "${HX_DATA_VOL}" >/dev/null 2>&1; then
+			log "ERROR: failed to create ${HX_DATA_VOL} volume on ubi${ubidx}"
+			log "ERROR: check available space: ubinfo ${ubidev}"
+			return 1
+		fi
+		log "OK: ${HX_DATA_VOL} volume created on ubi${ubidx}"
+	fi
+
 	if ! mount_data "${ubidx}"; then
 		log "ERROR: mount data disk failed (ubi${ubidx}:${HX_DATA_VOL} -> ${HX_DATA_MNT})"
 		return 1

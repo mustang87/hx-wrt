@@ -90,10 +90,38 @@ hx_ubifs_data_prepare_wr3000k() {
 
 	if ! ubinfo "${ubidev}" -N "${HX_DATA_VOL_NAME}" >/dev/null 2>&1; then
 		hx_log W "disk_ready: ${HX_DATA_VOL_NAME} missing -> try create volume (no format)"
+		
+		# Check if ubi1 has system volumes (should be data disk only)
+		local sys_vols=""
+		for vol in kernel rootfs rootfs_data; do
+			if ubinfo "${ubidev}" -N "${vol}" >/dev/null 2>&1; then
+				sys_vols="${sys_vols} ${vol}"
+			fi
+		done
+		
+		# If system volumes exist and no space available, remove them
+		if [ -n "${sys_vols}" ]; then
+			local avail_lebs
+			avail_lebs="$(ubinfo "${ubidev}" 2>/dev/null | awk '/Amount of available logical eraseblocks:/{print $6}')"
+			if [ "${avail_lebs:-0}" = "0" ]; then
+				hx_log W "disk_ready: ubi${ubidx} has system volumes${sys_vols} but should be data disk only"
+				hx_log W "disk_ready: removing system volumes to free space for ${HX_DATA_VOL_NAME}..."
+				
+				# Remove system volumes (they should not be mounted if ubi1 is data disk)
+				for vol in kernel rootfs rootfs_data; do
+					if ubinfo "${ubidev}" -N "${vol}" >/dev/null 2>&1; then
+						hx_log W "disk_ready: removing system volume ${vol} from ubi${ubidx}"
+						ubirmvol "${ubidev}" -N "${vol}" >/dev/null 2>&1 || true
+					fi
+				done
+			fi
+		fi
+		
 		if ! ubimkvol "${ubidev}" -m -N "${HX_DATA_VOL_NAME}" >/dev/null 2>&1; then
 			hx_log E "disk_ready: ubimkvol failed; NOT formatting automatically"
 			return 0
 		fi
+		hx_log I "disk_ready: ${HX_DATA_VOL_NAME} volume created on ubi${ubidx}"
 	fi
 
 	hx_set_fstab_data "ubi${ubidx}:${HX_DATA_VOL_NAME}"
